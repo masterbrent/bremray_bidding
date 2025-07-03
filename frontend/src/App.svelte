@@ -13,49 +13,13 @@
   let sidebarCollapsed = false;
   let mobileMenuOpen = false;
   
-  // Load mock data on mount
+  // Load data from API on mount
   onMount(() => {
-    // Mock items
-    itemsStore.loadItems([
-      {
-        id: '1',
-        name: 'Outlet',
-        unit: 'each',
-        unitPrice: 15.50,
-        category: 'Electrical',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '2',
-        name: 'Switch',
-        unit: 'each',
-        unitPrice: 12.00,
-        category: 'Electrical',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '3',
-        name: 'Wire 12 AWG',
-        unit: 'ft',
-        unitPrice: 0.85,
-        category: 'Wire',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      },
-      {
-        id: '4',
-        name: 'Circuit Breaker 20A',
-        unit: 'each',
-        unitPrice: 45.00,
-        category: 'Panel',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    ]);
+    // Load items from backend
+    itemsStore.load();
     
-    // Mock job templates
+    // TODO: Load job templates from backend when implemented
+    // For now, keep mock templates until backend is ready
     jobTemplatesStore.loadTemplates([
       {
         id: '1',

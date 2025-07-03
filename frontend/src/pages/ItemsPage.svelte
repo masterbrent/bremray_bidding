@@ -2,6 +2,12 @@
   import { itemsStore } from '../lib/stores';
   import { Card, Button, Modal, ConfirmModal } from '../lib/components';
   import type { Item } from '../lib/types/models';
+  import { onMount } from 'svelte';
+  
+  // Load items when component mounts
+  onMount(() => {
+    itemsStore.load();
+  });
   
   let showAddModal = false;
   let editingItem: Item | null = null;
@@ -45,7 +51,7 @@
     showAddModal = true;
   }
   
-  function handleSave() {
+  async function handleSave() {
     if (!formData.name || formData.unitPrice <= 0) {
       formError = 'Please fill in all required fields';
       return;
@@ -53,13 +59,16 @@
     
     formError = '';
     
-    if (editingItem) {
-      itemsStore.update(editingItem.id, formData);
-    } else {
-      itemsStore.add(formData);
+    try {
+      if (editingItem) {
+        await itemsStore.update(editingItem.id, formData);
+      } else {
+        await itemsStore.add(formData);
+      }
+      showAddModal = false;
+    } catch (error) {
+      formError = error instanceof Error ? error.message : 'Failed to save item';
     }
-    
-    showAddModal = false;
   }
   
   function confirmDelete(item: Item) {
@@ -69,10 +78,16 @@
     };
   }
   
-  function handleDelete() {
+  async function handleDelete() {
     if (deleteConfirm.item) {
-      itemsStore.remove(deleteConfirm.item.id);
-      deleteConfirm = { show: false, item: null };
+      try {
+        await itemsStore.remove(deleteConfirm.item.id);
+        deleteConfirm = { show: false, item: null };
+      } catch (error) {
+        console.error('Failed to delete item:', error);
+        // You might want to show an error message to the user
+        deleteConfirm = { show: false, item: null };
+      }
     }
   }
   
@@ -83,8 +98,11 @@
     }).format(amount);
   }
   
+  // Subscribe to the store to get reactive updates
+  $: ({ items, loading, error } = $itemsStore);
+  
   // Group items by category
-  $: groupedItems = $itemsStore.reduce((acc, item) => {
+  $: groupedItems = items.reduce((acc, item) => {
     const category = item.category || 'Uncategorized';
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
@@ -100,7 +118,16 @@
     </Button>
   </div>
   
-  {#if $itemsStore.length === 0}
+  {#if loading}
+    <div class="loading-state">
+      <p>Loading items...</p>
+    </div>
+  {:else if error}
+    <div class="error-state">
+      <p>Error: {error}</p>
+      <Button on:click={() => itemsStore.load()}>Try Again</Button>
+    </div>
+  {:else if items.length === 0}
     <div class="empty-state">
       <p>No items yet. Add your first item to get started.</p>
     </div>
@@ -261,10 +288,20 @@
     color: #374151;
   }
   
-  .empty-state {
+  .empty-state,
+  .loading-state,
+  .error-state {
     text-align: center;
     padding: 4rem 2rem;
     color: #6b7280;
+  }
+  
+  .error-state {
+    color: #dc2626;
+  }
+  
+  .error-state p {
+    margin-bottom: 1rem;
   }
   
   .categories {
