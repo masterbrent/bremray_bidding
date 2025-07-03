@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bremray API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .endpoint {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bremray API Test Page</h1>
+    
+    <div class="endpoint">
+        <h2>Health Check</h2>
+        <button onclick="testHealth()">Test Health</button>
+        <pre id="health-result"></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h2>List Items</h2>
+        <button onclick="listItems()">List All Items</button>
+        <pre id="list-result"></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h2>Create Item</h2>
+        <form onsubmit="createItem(event)">
+            <input type="text" id="name" placeholder="Name" required><br>
+            <input type="text" id="unit" placeholder="Unit (e.g., each, box)" required><br>
+            <input type="number" id="price" placeholder="Price" step="0.01" required><br>
+            <input type="text" id="category" placeholder="Category"><br>
+            <button type="submit">Create Item</button>
+        </form>
+        <pre id="create-result"></pre>
+    </div>
+    
+    <div class="endpoint">
+        <h2>Delete Item</h2>
+        <input type="text" id="delete-id" placeholder="Item ID">
+        <button onclick="deleteItem()">Delete</button>
+        <pre id="delete-result"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                document.getElementById('health-result').innerHTML = 
+                    `<span class="success">Status: ${response.status}</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                document.getElementById('health-result').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+        
+        async function listItems() {
+            try {
+                const response = await fetch(`${API_BASE}/items`);
+                const data = await response.json();
+                document.getElementById('list-result').innerHTML = 
+                    `<span class="success">Status: ${response.status}</span>\n${JSON.stringify(data, null, 2)}`;
+            } catch (error) {
+                document.getElementById('list-result').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+        
+        async function createItem(event) {
+            event.preventDefault();
+            
+            const item = {
+                name: document.getElementById('name').value,
+                unit: document.getElementById('unit').value,
+                unitPrice: parseFloat(document.getElementById('price').value),
+                category: document.getElementById('category').value
+            };
+            
+            try {
+                const response = await fetch(`${API_BASE}/items`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(item)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('create-result').innerHTML = 
+                        `<span class="success">Created! Status: ${response.status}</span>\n${JSON.stringify(data, null, 2)}`;
+                    // Clear form
+                    event.target.reset();
+                    // Refresh list
+                    listItems();
+                } else {
+                    document.getElementById('create-result').innerHTML = 
+                        `<span class="error">Error: Status ${response.status}</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                document.getElementById('create-result').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+        
+        async function deleteItem() {
+            const id = document.getElementById('delete-id').value;
+            if (!id) {
+                alert('Please enter an item ID');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/items/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    document.getElementById('delete-result').innerHTML = 
+                        `<span class="success">Deleted! Status: ${response.status}</span>`;
+                    // Refresh list
+                    listItems();
+                } else {
+                    const data = await response.json();
+                    document.getElementById('delete-result').innerHTML = 
+                        `<span class="error">Error: Status ${response.status}</span>\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                document.getElementById('delete-result').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
+            }
+        }
+        
+        // Load items on page load
+        window.onload = () => {
+            testHealth();
+            listItems();
+        };
+    </script>
+</body>
+</html>

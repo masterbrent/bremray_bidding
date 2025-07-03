@@ -116,9 +116,11 @@ func (h *ItemHandler) Update(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "Item not found")
 			return
 		}
-		if err.Error() == "item name is required" || err.Error() == "unit is required" || 
-		   err.Error() == "unit price must be positive" {
-			respondWithError(w, http.StatusBadRequest, err.Error())
+		// Check for validation errors
+		errMsg := err.Error()
+		if errMsg == "item name is required" || errMsg == "unit is required" || 
+		   errMsg == "unit price must be positive" || errMsg == "unit price cannot be negative" {
+			respondWithError(w, http.StatusBadRequest, errMsg)
 			return
 		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to update item")

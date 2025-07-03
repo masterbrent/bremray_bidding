@@ -335,8 +335,8 @@ func TestItemHandler_Update(t *testing.T) {
 			name: "successful update",
 			id:   "test-id",
 			body: map[string]interface{}{
-				"name":      "Updated Item",
-				"unitPrice": 25.00,
+				"name":       "Updated Item",
+				"unit_price": 25.00,
 			},
 			expectedCode: http.StatusOK,
 			setupMock: func(m *MockItemService) {
@@ -357,7 +357,7 @@ func TestItemHandler_Update(t *testing.T) {
 			name: "invalid update",
 			id:   "test-id",
 			body: map[string]interface{}{
-				"unitPrice": -10.00,
+				"unit_price": -10.00,
 			},
 			expectedCode: http.StatusBadRequest,
 			setupMock: func(m *MockItemService) {
@@ -392,7 +392,8 @@ func TestItemHandler_Update(t *testing.T) {
 			
 			// Assert
 			if w.Code != tt.expectedCode {
-				t.Errorf("expected status code %d, got %d", tt.expectedCode, w.Code)
+				body := w.Body.String()
+				t.Errorf("expected status code %d, got %d. Response: %s", tt.expectedCode, w.Code, body)
 			}
 		})
 	}
