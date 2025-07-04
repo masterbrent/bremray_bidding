@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { router } from './lib/router';
   import { itemsStore, jobsStore, jobTemplatesStore, companySettingsStore } from './lib/stores';
-  import { Menu, X, Briefcase, Package, FileText, Settings, Zap } from 'lucide-svelte';
+  import { Menu, X, Briefcase, Package, FileText, Settings, Zap, BarChart3 } from 'lucide-svelte';
   
   // Import pages
   import JobsPage from './pages/JobsPage.svelte';
@@ -10,6 +10,7 @@
   import JobTemplatesPage from './pages/JobTemplatesPage.svelte';
   import SettingsPage from './pages/SettingsPage.svelte';
   import JobDetailPage from './pages/JobDetailPage.svelte';
+  import StatsPage from './pages/StatsPage.svelte';
   
   let currentRoute = 'jobs';
   let routeParams: any = {};
@@ -18,6 +19,7 @@
   
   const navItems = [
     { route: 'jobs', label: 'Jobs', icon: Briefcase },
+    { route: 'stats', label: 'Stats', icon: BarChart3 },
     { route: 'items', label: 'Items', icon: Package },
     { route: 'templates', label: 'Templates', icon: FileText },
     { route: 'settings', label: 'Settings', icon: Settings },
@@ -114,6 +116,8 @@
       <div class="page-wrapper">
         {#if currentRoute === 'jobs'}
           <JobsPage />
+        {:else if currentRoute === 'stats'}
+          <StatsPage />
         {:else if currentRoute === 'items'}
           <ItemsPage />
         {:else if currentRoute === 'templates'}

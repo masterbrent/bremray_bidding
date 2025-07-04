@@ -4,7 +4,7 @@
   import { router } from '../lib/router';
   import { Plus, Search, Calendar, Clock, CheckCircle, AlertCircle,
            MapPin, DollarSign, Camera, FileText, Trash2, ChevronRight,
-           TrendingUp, Users, Package, Shield, ShieldOff, Activity,
+           Users, Package, Shield, ShieldOff, Activity,
            Edit3, ExternalLink, LayoutGrid, List } from 'lucide-svelte';
   import type { Customer, Job } from '../lib/types/models';
   
@@ -44,33 +44,12 @@
   
   let searchQuery = '';
   let statusFilter = 'all';
-  let formError = '';
+  let categoryFilter = 'all'; // New filter for skyview/contractors/rayno
   let viewMode: 'cards' | 'list' = 'cards';
-  
-  // Load view preference from localStorage
-  function loadViewPreference() {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('jobsViewMode');
-      if (saved === 'list' || saved === 'cards') {
-        viewMode = saved;
-      }
-    }
-  }
-  
-  // Save view preference to localStorage
-  function saveViewPreference(mode: 'cards' | 'list') {
-    viewMode = mode;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('jobsViewMode', mode);
-    }
-  }
+  let formError = '';
   
   // Load data
   onMount(async () => {
-    // Load view preference
-    loadViewPreference();
-    
-    // Load data
     await Promise.all([
       jobsStore.load(),
       jobTemplatesStore.loadActive(),
@@ -97,16 +76,6 @@
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  
-  // Calculate stats
-  $: totalRevenue = jobs.reduce((sum, job) => sum + (job.totalAmount || 0), 0);
-  $: activeJobs = jobs.filter(j => j.status === 'in_progress').length;
-  $: completedThisMonth = jobs.filter(j => {
-    if (j.status !== 'completed' || !j.endDate) return false;
-    const endDate = new Date(j.endDate);
-    const now = new Date();
-    return endDate.getMonth() === now.getMonth() && endDate.getFullYear() === now.getFullYear();
-  }).length;
   
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
@@ -329,118 +298,72 @@
 <div class="dashboard">
   <!-- Header -->
   <div class="dashboard-header">
-    <div>
-      <h1>Jobs</h1>
-      <p>Manage your electrical projects</p>
-    </div>
-    <Button on:click={() => showCreateModal = true}>
+    <h1>Jobs</h1>
+    <Button on:click={() => showCreateModal = true} variant="primary">
       <Plus size={20} />
-      Create Job
+      New
     </Button>
   </div>
 
-  <!-- Stats Grid -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-primary">
-        <Package size={24} />
-      </div>
-      <div class="stat-content">
-        <p class="stat-label">Total Jobs</p>
-        <p class="stat-value">{jobs.length}</p>
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-success">
-        <TrendingUp size={24} />
-      </div>
-      <div class="stat-content">
-        <p class="stat-label">Total Revenue</p>
-        <p class="stat-value">{formatCurrency(totalRevenue)}</p>
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-warning">
-        <Clock size={24} />
-      </div>
-      <div class="stat-content">
-        <p class="stat-label">Active Jobs</p>
-        <p class="stat-value">{activeJobs}</p>
-      </div>
-    </div>
-
-    <div class="stat-card">
-      <div class="stat-icon stat-icon-info">
-        <CheckCircle size={24} />
-      </div>
-      <div class="stat-content">
-        <p class="stat-label">Completed This Month</p>
-        <p class="stat-value">{completedThisMonth}</p>
-      </div>
-    </div>
+  <!-- Tabs -->
+  <div class="category-tabs">
+    <button 
+      class="category-tab"
+      class:active={categoryFilter === 'all'}
+      on:click={() => categoryFilter = 'all'}
+    >
+      All
+    </button>
+    <button 
+      class="category-tab"
+      class:active={categoryFilter === 'skyview'}
+      on:click={() => categoryFilter = 'skyview'}
+    >
+      Skyview
+    </button>
+    <button 
+      class="category-tab"
+      class:active={categoryFilter === 'contractors'}
+      on:click={() => categoryFilter = 'contractors'}
+    >
+      Contractors
+    </button>
+    <button 
+      class="category-tab"
+      class:active={categoryFilter === 'rayno'}
+      on:click={() => categoryFilter = 'rayno'}
+    >
+      Rayno
+    </button>
   </div>
 
-  <!-- Search and Filters -->
-  <div class="controls">
+  <!-- Search -->
+  <div class="search-section">
     <div class="search-wrapper">
-      <Search size={20} class="search-icon" />
+      <Search size={18} class="search-icon" />
       <input
         type="text"
-        placeholder="Search by customer or address..."
+        placeholder="Search jobs..."
         bind:value={searchQuery}
         class="search-input"
       />
     </div>
-
-    <div class="filter-tabs">
-      <button 
-        class="filter-tab"
-        class:active={statusFilter === 'all'}
-        on:click={() => statusFilter = 'all'}
-      >
-        All ({jobs.length})
-      </button>
-      <button 
-        class="filter-tab"
-        class:active={statusFilter === 'scheduled'}
-        on:click={() => statusFilter = 'scheduled'}
-      >
-        Scheduled ({jobs.filter(j => j.status === 'scheduled').length})
-      </button>
-      <button 
-        class="filter-tab"
-        class:active={statusFilter === 'in_progress'}
-        on:click={() => statusFilter = 'in_progress'}
-      >
-        In Progress ({jobs.filter(j => j.status === 'in_progress').length})
-      </button>
-      <button 
-        class="filter-tab"
-        class:active={statusFilter === 'completed'}
-        on:click={() => statusFilter = 'completed'}
-      >
-        Completed ({jobs.filter(j => j.status === 'completed').length})
-      </button>
-    </div>
-    
     <div class="view-toggle">
       <button
         class="view-btn"
         class:active={viewMode === 'cards'}
-        on:click={() => saveViewPreference('cards')}
+        on:click={() => viewMode = 'cards'}
         title="Card view"
       >
-        <LayoutGrid size={18} />
+        <LayoutGrid size={16} />
       </button>
       <button
         class="view-btn"
         class:active={viewMode === 'list'}
-        on:click={() => saveViewPreference('list')}
+        on:click={() => viewMode = 'list'}
         title="List view"
       >
-        <List size={18} />
+        <List size={16} />
       </button>
     </div>
   </div>
@@ -584,30 +507,28 @@
               <div class="list-item-left">
                 <div class="list-item-header">
                   <h4>{job.customer?.name || 'Unknown Customer'}</h4>
-                  <span class="list-badge {getStatusBadgeClass(job.status)}">{getStatusLabel(job.status)}</span>
+                  <span class="list-status {getStatusBadgeClass(job.status)}">{getStatusLabel(job.status)}</span>
                 </div>
                 <div class="list-item-details">
-                  <span class="list-template">{job.template?.name || 'Custom Job'}</span>
-                  <span class="list-address">{job.address}</span>
-                </div>
-                <div class="list-item-meta">
-                  <span>{formatCurrency(job.totalAmount || 0)}</span>
-                  <span>•</span>
-                  <span>{getCompletedItemsCount(job)}/{job.items?.length || 0} items</span>
-                  <span>•</span>
-                  <span>
-                    {#if job.startDate && job.endDate}
-                      {formatDateRange(job.startDate, job.endDate)}
-                    {:else if job.scheduledDate}
-                      {formatDate(job.scheduledDate)}
-                    {:else}
-                      Not scheduled
-                    {/if}
-                  </span>
+                  <div class="list-meta">
+                    <MapPin size={14} />
+                    <span>{job.address}</span>
+                  </div>
+                  <div class="list-meta">
+                    <Calendar size={14} />
+                    <span>
+                      {#if job.scheduledDate}
+                        {formatDate(job.scheduledDate)}
+                      {:else}
+                        Not scheduled
+                      {/if}
+                    </span>
+                  </div>
                 </div>
               </div>
               <div class="list-item-right">
-                <ChevronRight size={20} />
+                <span class="list-amount">{formatCurrency(job.totalAmount || 0)}</span>
+                <ChevronRight size={18} />
               </div>
             </div>
           {/each}
@@ -748,7 +669,7 @@
 
 <style>
   .dashboard {
-    padding: 2rem;
+    padding: 1.5rem;
     max-width: 1400px;
     margin: 0 auto;
   }
@@ -761,172 +682,70 @@
   }
 
   .dashboard-header h1 {
-    font-size: 2rem;
+    font-size: 1.875rem;
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
   }
 
-  .dashboard-header p {
+  /* Category Tabs */
+  .category-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .category-tab {
+    padding: 0.75rem 1.25rem;
+    border: none;
+    background: none;
+    font-size: 0.9375rem;
+    font-weight: 500;
     color: var(--text-secondary);
-    margin: 0.25rem 0 0 0;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
   }
 
-  /* Stats Grid */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+  .category-tab:hover {
+    color: var(--text-primary);
   }
 
-  .stat-card {
-    background: white;
-    border-radius: var(--radius-lg);
-    padding: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--gray-100);
-  }
-
-  .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .stat-icon-primary {
-    background: rgba(91, 91, 214, 0.1);
+  .category-tab.active {
     color: var(--primary-500);
+    border-bottom-color: var(--primary-500);
   }
 
-  .stat-icon-success {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--success-500);
-  }
-
-  .stat-icon-warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning-500);
-  }
-
-  .stat-icon-info {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3B82F6;
-  }
-
-  .stat-content {
-    flex: 1;
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-
-  .stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  /* Search and Controls */
-  .controls {
+  /* Search Section */
+  .search-section {
+    margin-bottom: 1.5rem;
     display: flex;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+    gap: 0.75rem;
     align-items: center;
   }
 
   .search-wrapper {
     position: relative;
     flex: 1;
-    max-width: 500px;
-  }
-
-  :global(.search-icon) {
-    position: absolute;
-    left: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-tertiary);
-    pointer-events: none;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 0.875rem 1rem 0.875rem 3rem;
-    border: 2px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    font-size: 0.9375rem;
-    background: white;
-    transition: all var(--transition-base);
-  }
-
-  .search-input::placeholder {
-    color: var(--text-tertiary);
-  }
-
-  .search-input:focus {
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
-    outline: none;
-  }
-
-  .filter-tabs {
-    display: flex;
-    gap: 0.5rem;
-    background: white;
-    padding: 0.25rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--gray-200);
-  }
-
-  .filter-tab {
-    padding: 0.5rem 1rem;
-    border: none;
-    background: transparent;
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-base);
-    white-space: nowrap;
-  }
-
-  .filter-tab:hover {
-    color: var(--text-primary);
-  }
-
-  .filter-tab.active {
-    background: var(--primary-500);
-    color: white;
   }
 
   /* View Toggle */
   .view-toggle {
     display: flex;
-    gap: 0.25rem;
-    background: white;
-    padding: 0.25rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--gray-200);
+    background: var(--gray-100);
+    padding: 0.125rem;
+    border-radius: var(--radius-md);
   }
 
   .view-btn {
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
     border: none;
     background: transparent;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--text-secondary);
     display: flex;
@@ -937,12 +756,41 @@
 
   .view-btn:hover {
     color: var(--text-primary);
-    background: var(--gray-50);
   }
 
   .view-btn.active {
-    background: var(--primary-500);
-    color: white;
+    background: white;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  :global(.search-icon) {
+    position: absolute;
+    left: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem 0.625rem 2.75rem;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    background: var(--gray-50);
+    transition: all var(--transition-base);
+  }
+
+  .search-input::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .search-input:focus {
+    border-color: var(--gray-300);
+    background: white;
+    outline: none;
   }
 
   /* Jobs Container */
@@ -954,6 +802,106 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
     gap: 1.5rem;
+  }
+
+  /* List View */
+  .jobs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .job-list-item {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .job-list-item:hover {
+    border-color: var(--gray-300);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .list-item-left {
+    flex: 1;
+  }
+
+  .list-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .list-item-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .list-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .list-status.badge-scheduled {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-500);
+  }
+
+  .list-status.badge-progress {
+    background: rgba(91, 91, 214, 0.1);
+    color: var(--primary-500);
+  }
+
+  .list-status.badge-completed {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-500);
+  }
+
+  .list-item-details {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+  }
+
+  .list-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .list-meta :global(svg) {
+    color: var(--text-tertiary);
+  }
+
+  .list-item-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .list-amount {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .list-item-right :global(svg) {
+    color: var(--text-tertiary);
   }
 
   /* List View */
@@ -1045,18 +993,16 @@
 
   .job-card {
     background: white;
-    border: 1px solid var(--gray-100);
-    border-radius: var(--radius-xl);
-    padding: 1.5rem;
-    position: relative;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
     transition: all var(--transition-base);
-    box-shadow: var(--shadow-sm);
+    cursor: pointer;
   }
 
   .job-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--gray-200);
+    border-color: var(--gray-300);
+    box-shadow: var(--shadow-sm);
   }
 
   /* Status Badge */
@@ -1543,31 +1489,51 @@
       padding: 1rem;
     }
 
-    .dashboard-header {
-      flex-direction: column;
-      align-items: start;
-      gap: 1rem;
+    .dashboard-header h1 {
+      font-size: 1.5rem;
     }
 
-    .stats-grid {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .controls {
+    .search-section {
       flex-direction: column;
+      gap: 0.75rem;
+      align-items: stretch;
     }
 
     .search-wrapper {
       max-width: 100%;
     }
 
-    .filter-tabs {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+    .view-toggle {
+      align-self: flex-start;
     }
 
     .jobs-grid {
       grid-template-columns: 1fr;
+    }
+
+    .job-list-item {
+      padding: 0.875rem 1rem;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+
+    .list-item-right {
+      flex-direction: row-reverse;
+      justify-content: space-between;
+      width: 100%;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--gray-100);
+    }
+
+    .list-item-details {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .list-meta {
+      font-size: 0.8125rem;
     }
   }
 
