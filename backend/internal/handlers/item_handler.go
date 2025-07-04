@@ -36,6 +36,7 @@ func NewItemHandler(service ItemService) *ItemHandler {
 func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string  `json:"name"`
+		Nickname  string  `json:"nickname"`
 		Unit      string  `json:"unit"`
 		UnitPrice float64 `json:"unitPrice"`
 		Category  string  `json:"category"`
@@ -55,6 +56,20 @@ func (h *ItemHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		respondWithError(w, http.StatusInternalServerError, "Failed to create item")
 		return
+	}
+	
+	// If nickname was provided, update the item
+	if req.Nickname != "" {
+		updates := map[string]interface{}{
+			"nickname": req.Nickname,
+		}
+		item, err = h.service.Update(r.Context(), item.ID, updates)
+		if err != nil {
+			// Item was created but nickname update failed - log but don't fail the request
+			// The item is still usable without a nickname
+			respondWithJSON(w, http.StatusCreated, item)
+			return
+		}
 	}
 
 	respondWithJSON(w, http.StatusCreated, item)
@@ -153,19 +168,3 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Helper functions
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, err := json.Marshal(payload)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to marshal response")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
-}
-
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
-}

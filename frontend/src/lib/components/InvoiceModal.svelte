@@ -7,13 +7,10 @@
   export let isOpen: boolean = false;
   export let job: Job | null = null;
   
-  // Calculate totals
-  $: subtotal = job?.items.reduce((sum, item) => {
-    return sum + (item.installedQuantity * item.item.unitPrice);
-  }, 0) || 0;
-  
-  $: tax = subtotal * 0.08; // 8% tax
-  $: total = subtotal + tax;
+  // Use the totalAmount from the job or calculate from items
+  $: subtotal = job ? (job.totalAmount / 1.08) : 0; // Assuming 8% tax is included
+  $: tax = job ? (job.totalAmount - subtotal) : 0;
+  $: total = job?.totalAmount || 0;
   
   function formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-US', {
@@ -38,7 +35,7 @@
       <!-- Invoice Header -->
       <div class="invoice-header">
         <div class="company-info">
-          <h2>ElectriBid Company</h2>
+          <h2>Bremray Electrical</h2>
           <p>123 Electric Avenue</p>
           <p>Anytown, ST 12345</p>
           <p>Phone: (555) 123-4567</p>
@@ -67,22 +64,20 @@
       <!-- Bill To -->
       <div class="bill-to">
         <h3>Bill To:</h3>
-        <p><strong>{job.customer.name}</strong></p>
+        <p><strong>Customer #{job.customerId}</strong></p>
         <p>{job.address}</p>
-        {#if job.customer.email}
-          <p>{job.customer.email}</p>
-        {/if}
-        {#if job.customer.phone}
-          <p>{job.customer.phone}</p>
-        {/if}
       </div>
       
       <!-- Job Details -->
       <div class="job-details">
         <h3>Job Details</h3>
         <div class="detail-row">
-          <span>Job Type:</span>
-          <span>{job.template.name}</span>
+          <span>Job ID:</span>
+          <span>{job.id.slice(-8).toUpperCase()}</span>
+        </div>
+        <div class="detail-row">
+          <span>Scheduled Date:</span>
+          <span>{formatDate(job.scheduledDate)}</span>
         </div>
         <div class="detail-row">
           <span>Start Date:</span>
@@ -92,10 +87,10 @@
           <span>Completion Date:</span>
           <span>{formatDate(job.endDate)}</span>
         </div>
-        {#if job.requiresPermit}
+        {#if job.permitRequired}
           <div class="detail-row">
             <span>Permit:</span>
-            <span>Required</span>
+            <span>{job.permitNumber || 'Required'}</span>
           </div>
         {/if}
       </div>
@@ -106,22 +101,18 @@
           <tr>
             <th>Description</th>
             <th>Quantity</th>
-            <th>Unit</th>
             <th>Rate</th>
             <th>Amount</th>
           </tr>
         </thead>
         <tbody>
           {#each job.items as item}
-            {#if item.installedQuantity > 0}
-              <tr>
-                <td>{item.item.name}</td>
-                <td>{item.installedQuantity}</td>
-                <td>{item.item.unit}</td>
-                <td>{formatCurrency(item.item.unitPrice)}</td>
-                <td>{formatCurrency(item.installedQuantity * item.item.unitPrice)}</td>
-              </tr>
-            {/if}
+            <tr>
+              <td>{item.name}</td>
+              <td>{item.quantity}</td>
+              <td>{formatCurrency(item.price)}</td>
+              <td>{formatCurrency(item.total)}</td>
+            </tr>
           {/each}
         </tbody>
       </table>

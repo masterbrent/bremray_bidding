@@ -16,6 +16,7 @@ var (
 type Item struct {
 	ID        string    `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name"`
+	Nickname  string    `json:"nickname,omitempty" db:"nickname"` // Display name for job cards
 	Unit      string    `json:"unit" db:"unit"`
 	UnitPrice float64   `json:"unitPrice" db:"unit_price"`
 	Category  string    `json:"category" db:"category"`
@@ -67,6 +68,9 @@ func (i *Item) Update(updates map[string]interface{}) error {
 	// Apply updates if validation passes
 	if val, ok := updates["name"]; ok {
 		i.Name = val.(string)
+	}
+	if val, ok := updates["nickname"]; ok {
+		i.Nickname = val.(string)
 	}
 	if val, ok := updates["unit"]; ok {
 		i.Unit = val.(string)

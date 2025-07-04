@@ -1,6 +1,8 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
+import { api } from '../api/client';
 
 export interface CompanySettings {
+  id: string;
   name: string;
   logo: string | null;
   address: string;
@@ -11,37 +13,78 @@ export interface CompanySettings {
   email: string;
   license: string;
   website: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CompanyState {
+  settings: CompanySettings | null;
+  loading: boolean;
+  error: string | null;
 }
 
 function createCompanySettingsStore() {
-  const defaultSettings: CompanySettings = {
-    name: 'Bremray Electrical',
-    logo: null,
-    address: '',
-    city: '',
-    state: '',
-    zip: '',
-    phone: '',
-    email: '',
-    license: '',
-    website: ''
-  };
-
-  const { subscribe, set, update } = writable<CompanySettings>(defaultSettings);
+  const { subscribe, set, update } = writable<CompanyState>({
+    settings: null,
+    loading: false,
+    error: null
+  });
 
   return {
     subscribe,
-    updateSettings: (settings: Partial<CompanySettings>) => {
-      update(current => ({ ...current, ...settings }));
+    
+    // Load company settings from backend
+    async load() {
+      update(state => ({ ...state, loading: true, error: null }));
+      try {
+        const settings = await api.get<CompanySettings>('/company');
+        set({ settings, loading: false, error: null });
+      } catch (error) {
+        update(state => ({
+          ...state,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to load company settings'
+        }));
+      }
     },
-    uploadLogo: (logoUrl: string) => {
-      update(current => ({ ...current, logo: logoUrl }));
+    
+    // Update company settings
+    async updateSettings(updates: Partial<CompanySettings>) {
+      update(state => ({ ...state, loading: true, error: null }));
+      try {
+        const settings = await api.put<CompanySettings>('/company', updates);
+        set({ settings, loading: false, error: null });
+        return settings;
+      } catch (error) {
+        update(state => ({
+          ...state,
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to update company settings'
+        }));
+        throw error;
+      }
     },
-    removeLogo: () => {
-      update(current => ({ ...current, logo: null }));
+    
+    // Upload logo (placeholder - will be implemented with R2)
+    async uploadLogo(logoUrl: string) {
+      const state = get(companySettingsStore);
+      if (!state.settings) return;
+      
+      return this.updateSettings({ ...state.settings, logo: logoUrl });
     },
-    reset: () => {
-      set(defaultSettings);
+    
+    // Remove logo
+    async removeLogo() {
+      const state = get(companySettingsStore);
+      if (!state.settings) return;
+      
+      return this.updateSettings({ ...state.settings, logo: '' });
+    },
+    
+    // Get current settings (for backward compatibility)
+    getSettings(): CompanySettings | null {
+      const state = get(companySettingsStore);
+      return state.settings;
     }
   };
 }

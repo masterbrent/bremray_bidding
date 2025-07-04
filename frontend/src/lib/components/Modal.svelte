@@ -1,150 +1,164 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { X } from 'lucide-svelte';
   
-  export let isOpen: boolean = false;
-  export let title: string = '';
-  export let size: 'small' | 'medium' | 'large' = 'medium';
-  
-  const dispatch = createEventDispatcher<{
-    close: void;
-  }>();
-  
-  let dialog: HTMLDialogElement;
-  
-  $: if (dialog && isOpen) {
-    dialog.showModal();
-  } else if (dialog && !isOpen) {
-    dialog.close();
-  }
-  
-  function handleClose() {
-    isOpen = false;
-    dispatch('close');
-  }
+  export let isOpen = false;
+  export let title = '';
+  export let size: 'sm' | 'md' | 'lg' = 'md';
   
   function handleBackdropClick(event: MouseEvent) {
-    if (event.target === dialog) {
-      handleClose();
+    if (event.target === event.currentTarget) {
+      isOpen = false;
     }
   }
   
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      handleClose();
+      isOpen = false;
     }
   }
 </script>
 
-<dialog
-  bind:this={dialog}
-  class="modal {size}"
-  on:click={handleBackdropClick}
-  on:keydown={handleKeydown}
->
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2>{title}</h2>
-      <button
-        type="button"
-        class="close-button"
-        on:click={handleClose}
-        aria-label="Close modal"
-      >
-        ×
-      </button>
-    </div>
-    
-    <div class="modal-body">
-      <slot />
-    </div>
-    
-    {#if $$slots.footer}
-      <div class="modal-footer">
-        <slot name="footer" />
+{#if isOpen}
+  <div class="modal-backdrop" on:click={handleBackdropClick} on:keydown={handleKeydown}>
+    <div class="modal modal-{size}">
+      <div class="modal-header">
+        <h2>{title}</h2>
+        <button class="close-btn" on:click={() => isOpen = false}>
+          <X size={20} />
+        </button>
       </div>
-    {/if}
+      
+      <div class="modal-body">
+        <slot />
+      </div>
+      
+      {#if $$slots.footer}
+        <div class="modal-footer">
+          <slot name="footer" />
+        </div>
+      {/if}
+    </div>
   </div>
-</dialog>
+{/if}
 
 <style>
-  dialog {
-    padding: 0;
-    border: none;
-    border-radius: 8px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    overflow: visible;
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+    animation: fadeIn 0.2s ease-out;
   }
   
-  dialog::backdrop {
-    background-color: rgba(0, 0, 0, 0.5);
-  }
-  
-  .modal-content {
+  .modal {
     background: white;
-    border-radius: 8px;
-    overflow: hidden;
+    border-radius: var(--radius-xl);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-2xl);
+    animation: slideUp 0.3s ease-out;
   }
   
-  .modal.small .modal-content {
-    width: 400px;
-    max-width: 90vw;
+  .modal-sm {
+    width: 100%;
+    max-width: 400px;
   }
   
-  .modal.medium .modal-content {
-    width: 600px;
-    max-width: 90vw;
+  .modal-md {
+    width: 100%;
+    max-width: 600px;
   }
   
-  .modal.large .modal-content {
-    width: 800px;
-    max-width: 90vw;
+  .modal-lg {
+    width: 100%;
+    max-width: 800px;
   }
   
   .modal-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     padding: 1.5rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--gray-100);
   }
   
   .modal-header h2 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--text-primary);
   }
   
-  .close-button {
-    width: 32px;
-    height: 32px;
+  .close-btn {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    color: var(--text-tertiary);
+    transition: all var(--transition-base);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
-    border: none;
-    border-radius: 4px;
-    font-size: 1.5rem;
-    color: #6b7280;
-    cursor: pointer;
-    transition: background-color 0.2s;
   }
   
-  .close-button:hover {
-    background-color: #f3f4f6;
+  .close-btn:hover {
+    background: var(--gray-100);
+    color: var(--text-primary);
   }
   
   .modal-body {
+    flex: 1;
     padding: 1.5rem;
-    max-height: 70vh;
     overflow-y: auto;
   }
   
   .modal-footer {
-    padding: 1rem 1.5rem;
-    border-top: 1px solid #e5e7eb;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
+    padding: 1.5rem;
+    border-top: 1px solid var(--gray-100);
+    background: var(--gray-50);
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  @media (max-width: 640px) {
+    .modal-backdrop {
+      padding: 0;
+      align-items: flex-end;
+    }
+    
+    .modal {
+      max-height: 80vh;
+      width: 100%;
+      max-width: 100%;
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    }
   }
 </style>

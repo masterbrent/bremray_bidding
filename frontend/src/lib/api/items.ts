@@ -6,6 +6,8 @@ function toFrontendItem(backendItem: any): Item {
   return {
     id: backendItem.id,
     name: backendItem.name,
+    nickname: backendItem.nickname,
+    description: backendItem.description,
     unit: backendItem.unit,
     unitPrice: backendItem.unitPrice,
     category: backendItem.category,
@@ -18,6 +20,8 @@ function toBackendItem(item: Partial<Item>): any {
   const backendItem: any = {};
   
   if (item.name !== undefined) backendItem.name = item.name;
+  if (item.nickname !== undefined) backendItem.nickname = item.nickname;
+  if (item.description !== undefined) backendItem.description = item.description;
   if (item.unit !== undefined) backendItem.unit = item.unit;
   if (item.unitPrice !== undefined) backendItem.unitPrice = item.unitPrice;
   if (item.category !== undefined) backendItem.category = item.category;

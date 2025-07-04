@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test App Loading</title>
+</head>
+<body>
+    <h1>Testing App Load</h1>
+    <div id="status"></div>
+    <div id="errors" style="color: red;"></div>
+    
+    <script>
+        const status = document.getElementById('status');
+        const errors = document.getElementById('errors');
+        
+        // Test if backend is accessible
+        fetch('http://localhost:8080/api/items')
+            .then(r => {
+                status.innerHTML += '<p>✅ Backend is accessible</p>';
+                return r.json();
+            })
+            .then(data => {
+                status.innerHTML += '<p>✅ Items loaded: ' + data.length + ' items</p>';
+            })
+            .catch(err => {
+                errors.innerHTML += '<p>❌ Backend error: ' + err.message + '</p>';
+            });
+            
+        // Test if frontend is accessible
+        fetch('http://localhost:5173/')
+            .then(r => {
+                status.innerHTML += '<p>✅ Frontend is accessible</p>';
+                return r.text();
+            })
+            .then(html => {
+                status.innerHTML += '<p>✅ Frontend HTML loaded (' + html.length + ' bytes)</p>';
+                
+                // Check if app div exists
+                if (html.includes('id="app"')) {
+                    status.innerHTML += '<p>✅ App div found in HTML</p>';
+                } else {
+                    errors.innerHTML += '<p>❌ App div not found in HTML</p>';
+                }
+            })
+            .catch(err => {
+                errors.innerHTML += '<p>❌ Frontend error: ' + err.message + '</p>';
+            });
+            
+        // Listen for any global errors
+        window.addEventListener('error', (e) => {
+            errors.innerHTML += '<p>❌ Global error: ' + e.message + '</p>';
+        });
+    </script>
+    
+    <h2>App iframe:</h2>
+    <iframe src="http://localhost:5173/" width="100%" height="400" style="border: 1px solid #ccc;"></iframe>
+</body>
+</html>

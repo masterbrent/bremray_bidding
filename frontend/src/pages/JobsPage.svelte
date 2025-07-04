@@ -1,38 +1,168 @@
 <script lang="ts">
-  import { jobsStore, jobTemplatesStore } from '../lib/stores';
+  import { onMount } from 'svelte';
+  import { jobsStore, jobTemplatesStore, customersStore } from '../lib/stores';
   import { router } from '../lib/router';
-  import { Card, Button, Modal, PhotoGalleryModal, InvoiceModal } from '../lib/components';
-  import { Plus, MapPin, Calendar, Package, AlertCircle, CheckCircle, Clock, XCircle, 
-           Shield, ShieldOff, Camera, FileText, Send, ExternalLink, DollarSign } from 'lucide-svelte';
+  import { Plus, Search, Calendar, Clock, CheckCircle, AlertCircle,
+           MapPin, DollarSign, Camera, FileText, Trash2, ChevronRight,
+           TrendingUp, Users, Package, Shield, ShieldOff, Activity,
+           Edit3, ExternalLink, LayoutGrid, List } from 'lucide-svelte';
   import type { Customer, Job } from '../lib/types/models';
+  
+  // Component imports
+  import Button from '../lib/components/Button.svelte';
+  import Card from '../lib/components/Card.svelte';
+  import Modal from '../lib/components/Modal.svelte';
+  import PhotoGalleryModal from '../lib/components/PhotoGalleryModal.svelte';
+  import InvoiceModal from '../lib/components/InvoiceModal.svelte';
+  import ConfirmModal from '../lib/components/ConfirmModal.svelte';
   
   let showCreateModal = false;
   let showPhotoGallery = false;
   let showInvoiceModal = false;
+  let showDateModal = false;
   let selectedJob: Job | null = null;
-  let editingDateJobId: string | null = null;
-  let tempStartDate: string = '';
-  let tempEndDate: string = '';
+  let editingJob: Job | null = null;
+  let deleteConfirm = {
+    show: false,
+    job: null as Job | null
+  };
+  
+  let dateForm = {
+    scheduledDate: '',
+    startDate: '',
+    endDate: ''
+  };
   
   let newJob = {
     customerName: '',
     address: '',
-    requiresPermit: false,
+    templateId: '',
     startDate: '',
     endDate: '',
-    templateId: ''
+    permitRequired: false
   };
   
-  function openGPS(address: string) {
-    // Encode the address for URL
-    const encodedAddress = encodeURIComponent(address);
-    // This will open the device's default map app
-    window.open(`https://maps.google.com/?q=${encodedAddress}`, '_blank');
+  let searchQuery = '';
+  let statusFilter = 'all';
+  let formError = '';
+  let viewMode: 'cards' | 'list' = 'cards';
+  
+  // Load view preference from localStorage
+  function loadViewPreference() {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('jobsViewMode');
+      if (saved === 'list' || saved === 'cards') {
+        viewMode = saved;
+      }
+    }
   }
   
-  function togglePermit(event: Event, jobId: string) {
-    event.stopPropagation();
-    jobsStore.togglePermit(jobId);
+  // Save view preference to localStorage
+  function saveViewPreference(mode: 'cards' | 'list') {
+    viewMode = mode;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jobsViewMode', mode);
+    }
+  }
+  
+  // Load data
+  onMount(async () => {
+    // Load view preference
+    loadViewPreference();
+    
+    // Load data
+    await Promise.all([
+      jobsStore.load(),
+      jobTemplatesStore.loadActive(),
+      customersStore.load()
+    ]);
+  });
+  
+  // Subscriptions
+  $: ({ jobs, loading, error } = $jobsStore);
+  $: ({ templates } = $jobTemplatesStore);
+  $: ({ customers } = $customersStore);
+  
+  // Filtered jobs with enriched data
+  $: filteredJobs = jobs
+    .map(job => ({
+      ...job,
+      customer: customers.find(c => c.id === job.customerId),
+      template: templates.find(t => t.id === job.templateId)
+    }))
+    .filter(job => {
+      const matchesSearch = !searchQuery || 
+        job.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.address.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  
+  // Calculate stats
+  $: totalRevenue = jobs.reduce((sum, job) => sum + (job.totalAmount || 0), 0);
+  $: activeJobs = jobs.filter(j => j.status === 'in_progress').length;
+  $: completedThisMonth = jobs.filter(j => {
+    if (j.status !== 'completed' || !j.endDate) return false;
+    const endDate = new Date(j.endDate);
+    const now = new Date();
+    return endDate.getMonth() === now.getMonth() && endDate.getFullYear() === now.getFullYear();
+  }).length;
+  
+  function formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  }
+  
+  function formatDate(date: string | Date | undefined): string {
+    if (!date) return 'Not scheduled';
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+  
+  function formatDateRange(start?: string | Date, end?: string | Date): string {
+    if (!start && !end) return '';
+    if (start && !end) return `Started ${formatDate(start)}`;
+    if (!start && end) return `Ended ${formatDate(end)}`;
+    
+    const startDate = new Date(start!);
+    const endDate = new Date(end!);
+    
+    // Same day
+    if (startDate.toDateString() === endDate.toDateString()) {
+      return formatDate(start);
+    }
+    
+    // Different days
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  }
+  
+  function getStatusBadgeClass(status: string): string {
+    switch (status) {
+      case 'scheduled': return 'badge-scheduled';
+      case 'in_progress': return 'badge-progress';
+      case 'completed': return 'badge-completed';
+      default: return 'badge-secondary';
+    }
+  }
+  
+  function getStatusLabel(status: string): string {
+    switch (status) {
+      case 'scheduled': return 'Scheduled';
+      case 'in_progress': return 'In Progress';
+      case 'completed': return 'Completed';
+      default: return status;
+    }
+  }
+  
+  function openJobDetail(job: Job) {
+    router.navigate('job-detail', { id: job.id });
   }
   
   function openPhotoGallery(event: Event, job: Job) {
@@ -47,394 +177,517 @@
     showInvoiceModal = true;
   }
   
-  function sendToWave(event: Event, job: Job) {
+  function openDateEdit(event: Event, job: Job) {
     event.stopPropagation();
-    // Mock Wave integration - in real app, this would call Wave API
-    const mockInvoiceId = `WAV-${Date.now()}`;
-    const mockInvoiceUrl = `https://wave.app/invoice/${mockInvoiceId}`;
-    jobsStore.setWaveInvoice(job.id, mockInvoiceId, mockInvoiceUrl);
+    editingJob = job;
+    dateForm = {
+      scheduledDate: job.scheduledDate ? new Date(job.scheduledDate).toISOString().split('T')[0] : '',
+      startDate: job.startDate ? new Date(job.startDate).toISOString().split('T')[0] : '',
+      endDate: job.endDate ? new Date(job.endDate).toISOString().split('T')[0] : ''
+    };
+    showDateModal = true;
   }
   
-  function openWaveInvoice(event: Event, url: string) {
+  async function togglePermitRequired(event: Event, job: Job) {
     event.stopPropagation();
-    window.open(url, '_blank');
+    try {
+      await jobsStore.update(job.id, {
+        permitRequired: !job.permitRequired,
+        permitNumber: !job.permitRequired ? '' : job.permitNumber
+      });
+    } catch (error) {
+      console.error('Failed to update permit status:', error);
+    }
   }
   
-  function formatCurrency(amount: number): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  async function handleDateUpdate() {
+    if (!editingJob) return;
+    
+    try {
+      const updates: any = {};
+      
+      if (dateForm.scheduledDate) {
+        updates.scheduledDate = new Date(dateForm.scheduledDate);
+      }
+      if (dateForm.startDate) {
+        updates.startDate = new Date(dateForm.startDate);
+        updates.status = 'in_progress';
+      }
+      if (dateForm.endDate) {
+        updates.endDate = new Date(dateForm.endDate);
+        updates.status = 'completed';
+      }
+      
+      await jobsStore.update(editingJob.id, updates);
+      showDateModal = false;
+      editingJob = null;
+    } catch (error) {
+      console.error('Failed to update dates:', error);
+    }
   }
   
-  let formError = '';
+  function confirmDeleteJob(event: Event, job: Job) {
+    event.stopPropagation();
+    deleteConfirm = { show: true, job };
+  }
   
-  function handleCreateJob() {
+  async function handleDeleteJob() {
+    if (deleteConfirm.job) {
+      try {
+        await jobsStore.remove(deleteConfirm.job.id);
+        deleteConfirm = { show: false, job: null };
+      } catch (error) {
+        console.error('Failed to delete job:', error);
+      }
+    }
+  }
+  
+  async function handleCreateJob() {
+    formError = '';
+    
     if (!newJob.customerName || !newJob.address || !newJob.templateId) {
       formError = 'Please fill in all required fields';
       return;
     }
     
-    formError = '';
-    
-    const customer: Customer = {
-      id: crypto.randomUUID(),
-      name: newJob.customerName
-    };
-    
-    const jobId = jobsStore.createFromTemplate(
-      customer,
-      newJob.address,
-      newJob.templateId,
-      newJob.requiresPermit,
-      newJob.startDate ? new Date(newJob.startDate) : undefined,
-      newJob.endDate ? new Date(newJob.endDate) : undefined
-    );
-    
-    // Reset form
-    newJob = {
-      customerName: '',
-      address: '',
-      requiresPermit: false,
-      startDate: '',
-      endDate: '',
-      templateId: ''
-    };
-    
-    showCreateModal = false;
-    formError = '';
-    
-    // Navigate to job detail
-    router.navigate('job-detail', { id: jobId });
-  }
-  
-  function getStatusIcon(status: string) {
-    switch (status) {
-      case 'pending': return Clock;
-      case 'in-progress': return AlertCircle;
-      case 'completed': return CheckCircle;
-      case 'cancelled': return XCircle;
-      default: return Clock;
+    try {
+      // Create or find customer
+      let customer = customers.find(c => 
+        c.name.toLowerCase() === newJob.customerName.toLowerCase()
+      );
+      
+      if (!customer) {
+        // Create new customer with minimal info
+        customer = await customersStore.create(
+          newJob.customerName,
+          'no-email@placeholder.com', // Required by API but we don't have it
+          ''  // No phone
+        );
+      }
+      
+      // Prepare dates
+      const scheduledDate = newJob.startDate ? new Date(newJob.startDate) : undefined;
+      
+      // Create the job
+      const jobId = await jobsStore.createFromTemplate(
+        customer.id,
+        newJob.address,
+        newJob.templateId,
+        scheduledDate
+      );
+      
+      // If permit is required or end date is set, update the job
+      if (newJob.permitRequired || newJob.endDate) {
+        const updates: any = {};
+        if (newJob.permitRequired) {
+          updates.permitRequired = true;
+        }
+        if (newJob.endDate) {
+          updates.endDate = new Date(newJob.endDate);
+        }
+        await jobsStore.update(jobId, updates);
+      }
+      
+      // Reset form
+      newJob = {
+        customerName: '',
+        address: '',
+        templateId: '',
+        startDate: '',
+        endDate: '',
+        permitRequired: false
+      };
+      showCreateModal = false;
+      
+      // Navigate to the new job
+      router.navigate('job-detail', { id: jobId });
+    } catch (error) {
+      console.error('Failed to create job:', error);
+      formError = error instanceof Error ? error.message : 'Failed to create job';
     }
   }
   
-  function getStatusColor(status: string) {
-    switch (status) {
-      case 'pending': return 'warning';
-      case 'in-progress': return 'primary';
-      case 'completed': return 'success';
-      case 'cancelled': return 'danger';
-      default: return 'gray';
-    }
+  // Helper to count completed items
+  function getCompletedItemsCount(job: Job): number {
+    return job.items?.filter(item => item.quantity > 0).length || 0;
   }
   
-  function formatDate(date?: Date) {
-    if (!date) return 'Not set';
-    return new Date(date).toLocaleDateString();
+  // Helper to get progress percentage
+  function getProgressPercentage(job: Job): number {
+    if (!job.items || job.items.length === 0) return 0;
+    const completed = getCompletedItemsCount(job);
+    return Math.round((completed / job.items.length) * 100);
   }
   
-  function formatDateForInput(date?: Date): string {
-    if (!date) return '';
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  // Open GPS/Maps for address
+  function openGPS(address: string) {
+    const encodedAddress = encodeURIComponent(address);
+    window.open(`https://maps.google.com/?q=${encodedAddress}`, '_blank');
   }
-  
-  function startEditingDate(event: Event, job: Job) {
-    event.stopPropagation();
-    editingDateJobId = job.id;
-    tempStartDate = formatDateForInput(job.startDate);
-    tempEndDate = formatDateForInput(job.endDate);
-  }
-  
-  function saveDates(event: Event, jobId: string) {
-    event.stopPropagation();
-    const startDate = tempStartDate ? new Date(tempStartDate) : undefined;
-    const endDate = tempEndDate ? new Date(tempEndDate) : undefined;
-    jobsStore.updateDates(jobId, startDate, endDate);
-    editingDateJobId = null;
-  }
-  
-  function cancelEditDate(event: Event) {
-    event.stopPropagation();
-    editingDateJobId = null;
-    tempStartDate = '';
-    tempEndDate = '';
-  }
-  
-  // Calculate stats
-  $: stats = {
-    total: $jobsStore.length,
-    active: $jobsStore.filter(j => j.status === 'in-progress').length,
-    pending: $jobsStore.filter(j => j.status === 'pending').length,
-    completed: $jobsStore.filter(j => j.status === 'completed').length
-  };
 </script>
 
-<div class="jobs-page">
-  <div class="page-header">
+<div class="dashboard">
+  <!-- Header -->
+  <div class="dashboard-header">
     <div>
-      <h1>Jobs Dashboard</h1>
-      <p class="subtitle">Manage your electrical projects</p>
+      <h1>Jobs</h1>
+      <p>Manage your electrical projects</p>
     </div>
     <Button on:click={() => showCreateModal = true}>
       <Plus size={20} />
-      Create New Job
+      Create Job
     </Button>
   </div>
-  
-  <!-- Stats Cards -->
+
+  <!-- Stats Grid -->
   <div class="stats-grid">
-    <Card variant="elevated" padding="small">
-      <div class="stat-card">
-        <div class="stat-icon primary">
-          <Package size={24} />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{stats.total}</div>
-          <div class="stat-label">Total Jobs</div>
-        </div>
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-primary">
+        <Package size={24} />
       </div>
-    </Card>
-    
-    <Card variant="elevated" padding="small">
-      <div class="stat-card">
-        <div class="stat-icon primary">
-          <AlertCircle size={24} />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{stats.active}</div>
-          <div class="stat-label">Active</div>
-        </div>
+      <div class="stat-content">
+        <p class="stat-label">Total Jobs</p>
+        <p class="stat-value">{jobs.length}</p>
       </div>
-    </Card>
-    
-    <Card variant="elevated" padding="small">
-      <div class="stat-card">
-        <div class="stat-icon warning">
-          <Clock size={24} />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{stats.pending}</div>
-          <div class="stat-label">Pending</div>
-        </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-success">
+        <TrendingUp size={24} />
       </div>
-    </Card>
-    
-    <Card variant="elevated" padding="small">
-      <div class="stat-card">
-        <div class="stat-icon success">
-          <CheckCircle size={24} />
-        </div>
-        <div class="stat-content">
-          <div class="stat-value">{stats.completed}</div>
-          <div class="stat-label">Completed</div>
-        </div>
+      <div class="stat-content">
+        <p class="stat-label">Total Revenue</p>
+        <p class="stat-value">{formatCurrency(totalRevenue)}</p>
       </div>
-    </Card>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-warning">
+        <Clock size={24} />
+      </div>
+      <div class="stat-content">
+        <p class="stat-label">Active Jobs</p>
+        <p class="stat-value">{activeJobs}</p>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-info">
+        <CheckCircle size={24} />
+      </div>
+      <div class="stat-content">
+        <p class="stat-label">Completed This Month</p>
+        <p class="stat-value">{completedThisMonth}</p>
+      </div>
+    </div>
   </div>
-  
-  <!-- Jobs Grid -->
-  {#if $jobsStore.length === 0}
-    <Card variant="elevated">
+
+  <!-- Search and Filters -->
+  <div class="controls">
+    <div class="search-wrapper">
+      <Search size={20} class="search-icon" />
+      <input
+        type="text"
+        placeholder="Search by customer or address..."
+        bind:value={searchQuery}
+        class="search-input"
+      />
+    </div>
+
+    <div class="filter-tabs">
+      <button 
+        class="filter-tab"
+        class:active={statusFilter === 'all'}
+        on:click={() => statusFilter = 'all'}
+      >
+        All ({jobs.length})
+      </button>
+      <button 
+        class="filter-tab"
+        class:active={statusFilter === 'scheduled'}
+        on:click={() => statusFilter = 'scheduled'}
+      >
+        Scheduled ({jobs.filter(j => j.status === 'scheduled').length})
+      </button>
+      <button 
+        class="filter-tab"
+        class:active={statusFilter === 'in_progress'}
+        on:click={() => statusFilter = 'in_progress'}
+      >
+        In Progress ({jobs.filter(j => j.status === 'in_progress').length})
+      </button>
+      <button 
+        class="filter-tab"
+        class:active={statusFilter === 'completed'}
+        on:click={() => statusFilter = 'completed'}
+      >
+        Completed ({jobs.filter(j => j.status === 'completed').length})
+      </button>
+    </div>
+    
+    <div class="view-toggle">
+      <button
+        class="view-btn"
+        class:active={viewMode === 'cards'}
+        on:click={() => saveViewPreference('cards')}
+        title="Card view"
+      >
+        <LayoutGrid size={18} />
+      </button>
+      <button
+        class="view-btn"
+        class:active={viewMode === 'list'}
+        on:click={() => saveViewPreference('list')}
+        title="List view"
+      >
+        <List size={18} />
+      </button>
+    </div>
+  </div>
+
+  <!-- Jobs List -->
+  <div class="jobs-container">
+    {#if loading}
       <div class="empty-state">
-        <Package size={48} strokeWidth={1.5} />
-        <h3>No jobs yet</h3>
-        <p>Create your first job to get started</p>
-        <Button on:click={() => showCreateModal = true}>
-          <Plus size={20} />
-          Create First Job
+        <div class="spinner"></div>
+        <p>Loading jobs...</p>
+      </div>
+    {:else if error}
+      <div class="empty-state">
+        <AlertCircle size={48} class="empty-icon" />
+        <h3>Error loading jobs</h3>
+        <p>{error}</p>
+        <Button on:click={() => jobsStore.load()} variant="secondary">
+          Try Again
         </Button>
       </div>
-    </Card>
-  {:else}
-    <div class="jobs-grid">
-      {#each $jobsStore as job}
-        <Card 
-          variant="elevated"
-          clickable
-          on:click={() => router.navigate('job-detail', { id: job.id })}
-        >
+    {:else if filteredJobs.length === 0}
+      <div class="empty-state">
+        <Package size={48} class="empty-icon" />
+        <h3>No jobs found</h3>
+        <p>{searchQuery ? 'Try adjusting your search' : 'Create your first job to get started'}</p>
+        {#if !searchQuery}
+          <Button on:click={() => showCreateModal = true}>
+            <Plus size={20} />
+            Create Job
+          </Button>
+        {/if}
+      </div>
+    {:else}
+      {#if viewMode === 'cards'}
+        <div class="jobs-grid">
+          {#each filteredJobs as job}
           <div class="job-card">
-            <div class="job-header">
-              <div>
-                <h3>{job.customer.name}</h3>
-                <div class="badges">
-                  <span class="badge template-badge">{job.template.name}</span>
-                  <button 
-                    class="badge permit-badge"
-                    class:required={job.requiresPermit}
-                    on:click={(e) => togglePermit(e, job.id)}
-                    title="Click to toggle permit status"
-                  >
-                    {#if job.requiresPermit}
-                      <Shield size={14} />
-                      Permit
-                    {:else}
-                      <ShieldOff size={14} />
-                      No Permit
-                    {/if}
-                  </button>
-                </div>
-              </div>
-              <div class="job-total">
-                <DollarSign size={20} />
-                <span>{formatCurrency(jobsStore.calculateJobTotal(job))}</span>
-              </div>
+            <!-- Status Badge -->
+            <div class="job-status-badge {getStatusBadgeClass(job.status)}">
+              {getStatusLabel(job.status)}
             </div>
-            
-            <button 
-              class="address-link"
-              on:click|stopPropagation={() => openGPS(job.address)}
-              title="Open in maps"
-            >
-              <MapPin size={16} />
-              {job.address}
-            </button>
-            
-            <div class="job-meta-row">
-              {#if editingDateJobId === job.id}
-                <div class="date-edit-form">
-                  <div class="date-input-group">
-                    <label for="start-{job.id}">Start:</label>
-                    <input 
-                      id="start-{job.id}"
-                      type="date" 
-                      bind:value={tempStartDate}
-                      on:click|stopPropagation
-                    />
-                  </div>
-                  <div class="date-input-group">
-                    <label for="end-{job.id}">End:</label>
-                    <input 
-                      id="end-{job.id}"
-                      type="date" 
-                      bind:value={tempEndDate}
-                      on:click|stopPropagation
-                    />
-                  </div>
-                  <div class="date-edit-actions">
-                    <button 
-                      class="date-btn save"
-                      on:click={(e) => saveDates(e, job.id)}
-                      title="Save dates"
-                    >
-                      <CheckCircle size={16} />
-                    </button>
-                    <button 
-                      class="date-btn cancel"
-                      on:click={cancelEditDate}
-                      title="Cancel"
-                    >
-                      <XCircle size={16} />
-                    </button>
-                  </div>
-                </div>
-              {:else}
+
+            <!-- Customer & Template -->
+            <div class="job-header">
+              <h3>{job.customer?.name || 'Unknown Customer'} - {job.address.split(',')[1]?.trim() || 'Location'}</h3>
+              <div class="job-template-row">
+                <span class="template-badge">{job.template?.name || 'Custom Job'}</span>
                 <button 
-                  class="job-meta clickable-date"
-                  on:click={(e) => startEditingDate(e, job)}
-                  title="Click to edit dates"
+                  class="permit-toggle"
+                  class:permit-required={job.permitRequired}
+                  on:click={(e) => togglePermitRequired(e, job)}
                 >
-                  <Calendar size={16} />
-                  <span>{formatDate(job.startDate)}</span>
-                  {#if job.endDate}
-                    <span class="date-separator">→</span>
-                    <span>{formatDate(job.endDate)}</span>
+                  {#if job.permitRequired}
+                    <Shield size={16} />
+                    <span>Permit Required</span>
+                  {:else}
+                    <ShieldOff size={16} />
+                    <span>No Permit</span>
                   {/if}
                 </button>
-              {/if}
-              <div class="job-meta">
-                <div class="status-badge {getStatusColor(job.status)}">
-                  <svelte:component this={getStatusIcon(job.status)} size={14} />
-                  {job.status}
-                </div>
               </div>
             </div>
-            
+
+            <!-- Amount -->
+            <div class="job-amount-section">
+              <span class="amount">{formatCurrency(job.totalAmount || 0)}</span>
+            </div>
+
+            <!-- Address -->
+            <div class="job-address" on:click={(e) => { e.stopPropagation(); openGPS(job.address); }}>
+              <MapPin size={16} />
+              <span>{job.address}</span>
+            </div>
+
+            <!-- Date -->
+            <div class="job-date" on:click={(e) => openDateEdit(e, job)}>
+              <Calendar size={16} />
+              <span>
+                {#if job.startDate && job.endDate}
+                  {formatDateRange(job.startDate, job.endDate)}
+                {:else if job.scheduledDate}
+                  {formatDate(job.scheduledDate)}
+                {:else}
+                  Not scheduled
+                {/if}
+              </span>
+              <Edit3 size={14} class="date-edit-icon" />
+            </div>
+
+            <!-- Progress -->
+            <div class="job-progress">
+              <div class="progress-info">
+                <span>{getCompletedItemsCount(job)} items completed</span>
+                <span class="progress-percent">{getProgressPercentage(job)}%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: {getProgressPercentage(job)}%"></div>
+              </div>
+            </div>
+
+            <!-- Wave Invoice -->
+            {#if job.waveInvoiceId}
+              <div class="wave-invoice">
+                <span>Wave Invoice</span>
+                <a href={job.waveInvoiceUrl} target="_blank" on:click|stopPropagation class="wave-link">
+                  {job.waveInvoiceId}
+                  <ExternalLink size={14} />
+                </a>
+              </div>
+            {/if}
+
+            <!-- Actions -->
             <div class="job-actions">
-              <button 
-                class="action-btn"
-                on:click={(e) => openPhotoGallery(e, job)}
-                title="View photos"
-              >
+              <button class="action-btn" on:click={(e) => openPhotoGallery(e, job)}>
                 <Camera size={18} />
-                <span class="action-count">{job.photos?.length || 0}</span>
+                <span>Gallery</span>
               </button>
-              
-              <button 
-                class="action-btn"
-                on:click={(e) => openInvoice(e, job)}
-                title="View invoice"
-              >
+              <button class="action-btn" on:click={(e) => openInvoice(e, job)}>
                 <FileText size={18} />
+                <span>Invoice</span>
               </button>
-              
-              {#if job.waveInvoiceId}
-                <button 
-                  class="action-btn sent"
-                  on:click={(e) => openWaveInvoice(e, job.waveInvoiceUrl || '')}
-                  title="View in Wave"
-                >
-                  <ExternalLink size={18} />
-                  <span class="invoice-id">{job.waveInvoiceId}</span>
-                </button>
-              {:else}
-                <button 
-                  class="action-btn primary"
-                  on:click={(e) => sendToWave(e, job)}
-                  title="Send to Wave"
-                >
-                  <Send size={18} />
-                  Wave
-                </button>
-              {/if}
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="job-footer">
+              <Button fullWidth on:click={() => openJobDetail(job)}>
+                View Job
+              </Button>
+              <button class="delete-btn" on:click={(e) => confirmDeleteJob(e, job)}>
+                <Trash2 size={18} />
+                Delete Job
+              </button>
             </div>
           </div>
-        </Card>
-      {/each}
-    </div>
-  {/if}
+        {/each}
+      </div>
+      {:else}
+        <div class="jobs-list">
+          {#each filteredJobs as job}
+            <div class="job-list-item" on:click={() => openJobDetail(job)}>
+              <div class="list-item-left">
+                <div class="list-item-header">
+                  <h4>{job.customer?.name || 'Unknown Customer'}</h4>
+                  <span class="list-badge {getStatusBadgeClass(job.status)}">{getStatusLabel(job.status)}</span>
+                </div>
+                <div class="list-item-details">
+                  <span class="list-template">{job.template?.name || 'Custom Job'}</span>
+                  <span class="list-address">{job.address}</span>
+                </div>
+                <div class="list-item-meta">
+                  <span>{formatCurrency(job.totalAmount || 0)}</span>
+                  <span>•</span>
+                  <span>{getCompletedItemsCount(job)}/{job.items?.length || 0} items</span>
+                  <span>•</span>
+                  <span>
+                    {#if job.startDate && job.endDate}
+                      {formatDateRange(job.startDate, job.endDate)}
+                    {:else if job.scheduledDate}
+                      {formatDate(job.scheduledDate)}
+                    {:else}
+                      Not scheduled
+                    {/if}
+                  </span>
+                </div>
+              </div>
+              <div class="list-item-right">
+                <ChevronRight size={20} />
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  </div>
 </div>
+<!-- Date Edit Modal -->
+<Modal bind:isOpen={showDateModal} title="Edit Job Dates" size="sm">
+  <form on:submit|preventDefault={handleDateUpdate}>
+    <div class="form-group">
+      <label>Scheduled Date</label>
+      <input
+        type="date"
+        bind:value={dateForm.scheduledDate}
+      />
+    </div>
+    
+    <div class="form-group">
+      <label>Start Date</label>
+      <input
+        type="date"
+        bind:value={dateForm.startDate}
+      />
+    </div>
+    
+    <div class="form-group">
+      <label>End Date</label>
+      <input
+        type="date"
+        bind:value={dateForm.endDate}
+      />
+    </div>
+  </form>
+  
+  <div slot="footer" class="modal-footer">
+    <Button variant="ghost" on:click={() => showDateModal = false}>
+      Cancel
+    </Button>
+    <Button on:click={handleDateUpdate}>
+      Update Dates
+    </Button>
+  </div>
+</Modal>
 
-<Modal bind:isOpen={showCreateModal} title="Create New Job" size="medium">
+<!-- Create Job Modal -->
+<Modal bind:isOpen={showCreateModal} title="Add New Job">
   {#if formError}
     <div class="error-message">
-      <AlertCircle size={20} />
       {formError}
     </div>
   {/if}
   
   <form on:submit|preventDefault={handleCreateJob}>
     <div class="form-group">
-      <label for="customer-name">Customer Name *</label>
+      <label>Customer Name *</label>
       <input
-        id="customer-name"
         type="text"
         bind:value={newJob.customerName}
-        placeholder="John Doe"
+        placeholder="Enter customer name"
         required
       />
     </div>
     
     <div class="form-group">
-      <label for="address">Job Address *</label>
-      <input
-        id="address"
-        type="text"
+      <label>Address *</label>
+      <textarea
         bind:value={newJob.address}
-        placeholder="123 Main St, City, State"
+        placeholder="Enter full address"
+        rows="3"
         required
-      />
+      ></textarea>
     </div>
     
     <div class="form-group">
-      <label for="template">Job Template *</label>
-      <select id="template" bind:value={newJob.templateId} required>
-        <option value="">Select a template...</option>
-        {#each $jobTemplatesStore as template}
+      <label>Project Template *</label>
+      <select bind:value={newJob.templateId} required>
+        <option value="">Select project template</option>
+        {#each templates as template}
           <option value={template.id}>{template.name}</option>
         {/each}
       </select>
@@ -442,36 +695,34 @@
     
     <div class="form-row">
       <div class="form-group">
-        <label for="start-date">Start Date</label>
+        <label>Start Date</label>
         <input
-          id="start-date"
           type="date"
           bind:value={newJob.startDate}
         />
       </div>
       
       <div class="form-group">
-        <label for="end-date">End Date</label>
+        <label>End Date</label>
         <input
-          id="end-date"
           type="date"
           bind:value={newJob.endDate}
         />
       </div>
     </div>
     
-    <div class="form-group checkbox">
-      <label>
+    <div class="form-group">
+      <label class="checkbox-label">
         <input
           type="checkbox"
-          bind:checked={newJob.requiresPermit}
+          bind:checked={newJob.permitRequired}
         />
-        <span>Requires Permit</span>
+        Permit Required
       </label>
     </div>
   </form>
   
-  <div slot="footer">
+  <div slot="footer" class="modal-footer">
     <Button variant="ghost" on:click={() => showCreateModal = false}>
       Cancel
     </Button>
@@ -481,41 +732,46 @@
   </div>
 </Modal>
 
-<PhotoGalleryModal 
-  bind:isOpen={showPhotoGallery} 
-  photos={selectedJob?.photos || []}
-  title={selectedJob ? `${selectedJob.customer.name} - Photos` : 'Photos'}
-/>
+{#if selectedJob}
+  <PhotoGalleryModal bind:isOpen={showPhotoGallery} job={selectedJob} />
+  <InvoiceModal bind:isOpen={showInvoiceModal} job={selectedJob} />
+{/if}
 
-<InvoiceModal 
-  bind:isOpen={showInvoiceModal}
-  job={selectedJob}
+<ConfirmModal
+  bind:isOpen={deleteConfirm.show}
+  title="Delete Job"
+  message={`Are you sure you want to delete this job for ${deleteConfirm.job?.customer?.name || 'this customer'}?`}
+  confirmText="Delete"
+  onConfirm={handleDeleteJob}
+  onCancel={() => deleteConfirm = { show: false, job: null }}
 />
 
 <style>
-  .jobs-page {
+  .dashboard {
     padding: 2rem;
     max-width: 1400px;
     margin: 0 auto;
   }
-  
-  .page-header {
+
+  .dashboard-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2rem;
   }
-  
-  h1 {
+
+  .dashboard-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin: 0;
   }
-  
-  .subtitle {
+
+  .dashboard-header p {
+    color: var(--text-secondary);
     margin: 0.25rem 0 0 0;
-    color: var(--gray-500);
-    font-size: 1rem;
   }
-  
+
   /* Stats Grid */
   .stats-grid {
     display: grid;
@@ -523,465 +779,809 @@
     gap: 1.5rem;
     margin-bottom: 2rem;
   }
-  
+
   .stat-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
     display: flex;
     align-items: center;
     gap: 1rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-100);
   }
-  
+
   .stat-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
   }
-  
-  .stat-icon.primary {
-    background: var(--primary-100);
-    color: var(--primary-600);
+
+  .stat-icon-primary {
+    background: rgba(91, 91, 214, 0.1);
+    color: var(--primary-500);
   }
-  
-  .stat-icon.warning {
-    background: var(--warning-100);
-    color: var(--warning-600);
+
+  .stat-icon-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-500);
   }
-  
-  .stat-icon.success {
-    background: var(--success-100);
-    color: var(--success-600);
+
+  .stat-icon-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-500);
   }
-  
+
+  .stat-icon-info {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3B82F6;
+  }
+
   .stat-content {
     flex: 1;
   }
-  
-  .stat-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--gray-900);
-    line-height: 1;
-  }
-  
+
   .stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  /* Search and Controls */
+  .controls {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .search-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 500px;
+  }
+
+  :global(.search-icon) {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 0.875rem 1rem 0.875rem 3rem;
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-lg);
     font-size: 0.9375rem;
-    color: var(--gray-500);
-    margin-top: 0.25rem;
+    background: white;
+    transition: all var(--transition-base);
   }
-  
-  /* Empty State */
-  .empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    color: var(--gray-500);
+
+  .search-input::placeholder {
+    color: var(--text-tertiary);
   }
-  
-  .empty-state h3 {
-    margin: 1rem 0 0.5rem 0;
-    color: var(--gray-900);
+
+  .search-input:focus {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
+    outline: none;
   }
-  
-  .empty-state p {
-    margin: 0 0 1.5rem 0;
+
+  .filter-tabs {
+    display: flex;
+    gap: 0.5rem;
+    background: white;
+    padding: 0.25rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--gray-200);
   }
-  
-  /* Jobs Grid */
+
+  .filter-tab {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+  }
+
+  .filter-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .filter-tab.active {
+    background: var(--primary-500);
+    color: white;
+  }
+
+  /* View Toggle */
+  .view-toggle {
+    display: flex;
+    gap: 0.25rem;
+    background: white;
+    padding: 0.25rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--gray-200);
+  }
+
+  .view-btn {
+    padding: 0.5rem;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-base);
+  }
+
+  .view-btn:hover {
+    color: var(--text-primary);
+    background: var(--gray-50);
+  }
+
+  .view-btn.active {
+    background: var(--primary-500);
+    color: white;
+  }
+
+  /* Jobs Container */
+  .jobs-container {
+    min-height: 400px;
+  }
+
   .jobs-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
     gap: 1.5rem;
   }
-  
-  .job-card {
+
+  /* List View */
+  .jobs-list {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
-  
-  .job-header {
+
+  .job-list-item {
+    background: white;
+    border: 1px solid var(--gray-100);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-sm);
   }
-  
-  .job-header h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.125rem;
-    color: var(--gray-900);
-    font-weight: 600;
+
+  .job-list-item:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--gray-200);
   }
-  
-  .badges {
+
+  .list-item-left {
+    flex: 1;
     display: flex;
+    flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .list-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .list-item-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .list-badge {
+    padding: 0.25rem 0.625rem;
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .list-item-details {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     flex-wrap: wrap;
   }
-  
-  .badge {
+
+  .list-template {
+    background: var(--gray-100);
+    color: var(--text-secondary);
     padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
     font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
   }
-  
-  .template-badge {
-    background: var(--gray-100);
-    color: var(--gray-700);
+
+  .list-address {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
   }
-  
-  .permit-badge {
-    background: var(--gray-100);
-    color: var(--gray-600);
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  
-  .permit-badge:hover {
-    background: var(--gray-200);
-  }
-  
-  .permit-badge.required {
-    background: var(--warning-100);
-    color: var(--warning-700);
-  }
-  
-  .permit-badge.required:hover {
-    background: var(--warning-200);
-  }
-  
-  .job-total {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--gray-900);
-  }
-  
-  .status-badge {
-    padding: 0.25rem 0.625rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: capitalize;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-  
-  .status-badge.primary {
-    background: var(--primary-100);
-    color: var(--primary-700);
-  }
-  
-  .status-badge.warning {
-    background: var(--warning-100);
-    color: var(--warning-700);
-  }
-  
-  .status-badge.success {
-    background: var(--success-100);
-    color: var(--success-600);
-  }
-  
-  .status-badge.danger {
-    background: var(--danger-100);
-    color: var(--danger-700);
-  }
-  
-  .status-badge.gray {
-    background: var(--gray-100);
-    color: var(--gray-700);
-  }
-  
-  .address-link {
+
+  .list-item-meta {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    color: var(--text-tertiary);
+    font-size: 0.8125rem;
+  }
+
+  .list-item-right {
+    color: var(--text-tertiary);
+  }
+
+  .job-card {
+    background: white;
+    border: 1px solid var(--gray-100);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    position: relative;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .job-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--gray-200);
+  }
+
+  /* Status Badge */
+  .job-status-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-scheduled {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-500);
+  }
+
+  .badge-progress {
+    background: rgba(91, 91, 214, 0.1);
+    color: var(--primary-500);
+  }
+
+  .badge-completed {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success-500);
+  }
+
+  /* Job Header */
+  .job-header {
+    margin-bottom: 1rem;
+  }
+
+  .job-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-primary);
+    padding-right: 100px;
+  }
+
+  .job-template-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .template-badge {
+    background: var(--gray-100);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .permit-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem;
     background: var(--gray-100);
     border: none;
-    padding: 0.75rem 1rem;
-    margin: 0 -0.25rem;
-    color: var(--gray-700);
+    border-radius: var(--radius-md);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
     cursor: pointer;
-    font-size: 0.9375rem;
-    text-align: left;
-    transition: all 0.2s;
-    border-radius: 12px;
-    font-family: inherit;
+    transition: all var(--transition-base);
   }
-  
-  .address-link:hover {
-    background: var(--primary-100);
-    color: var(--primary-700);
+
+  .permit-toggle:hover {
+    background: var(--gray-200);
   }
-  
-  .job-meta-row {
+
+  .permit-toggle.permit-required {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--warning-500);
+  }
+
+  /* Amount */
+  .job-amount-section {
+    margin-bottom: 1rem;
+  }
+
+  .amount {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Address */
+  .job-address {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    padding: 0.375rem;
+    margin: 0 -0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-base);
+  }
+
+  .job-address:hover {
+    background: var(--gray-50);
+    color: var(--primary-500);
+  }
+
+  .job-address :global(svg) {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+  }
+
+  .job-address:hover :global(svg) {
+    color: var(--primary-500);
+  }
+
+  /* Date */
+  .job-date {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    padding: 0.375rem;
+    margin: 0 -0.375rem 1rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-base);
+  }
+
+  .job-date:hover {
+    background: var(--gray-50);
+  }
+
+  .job-date :global(svg) {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+  }
+
+  :global(.date-edit-icon) {
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+  }
+
+  .job-date:hover :global(.date-edit-icon) {
+    opacity: 1;
+  }
+
+  /* Progress */
+  .job-progress {
+    margin-bottom: 1rem;
+  }
+
+  .progress-info {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 0;
-    border-top: 1px solid var(--gray-200);
-  }
-  
-  .job-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
+    margin-bottom: 0.5rem;
     font-size: 0.875rem;
-    color: var(--gray-500);
+    color: var(--text-secondary);
   }
-  
-  .job-meta.clickable-date {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-    border-radius: 8px;
-    padding: 0.25rem 0.5rem;
-    margin: -0.25rem -0.5rem;
+
+  .progress-percent {
+    font-weight: 600;
+    color: var(--text-primary);
   }
-  
-  .job-meta.clickable-date:hover {
-    background: var(--gray-100);
-    color: var(--gray-700);
+
+  .progress-bar {
+    height: 8px;
+    background: var(--gray-200);
+    border-radius: var(--radius-full);
+    overflow: hidden;
   }
-  
-  .date-separator {
-    color: var(--gray-400);
-    margin: 0 0.25rem;
+
+  .progress-fill {
+    height: 100%;
+    background: var(--primary-500);
+    border-radius: var(--radius-full);
+    transition: width var(--transition-base);
   }
-  
-  .date-edit-form {
+
+  /* Wave Invoice */
+  .wave-invoice {
     display: flex;
-    gap: 0.75rem;
+    justify-content: space-between;
     align-items: center;
-    flex: 1;
+    padding: 0.75rem;
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
   }
-  
-  .date-input-group {
+
+  .wave-invoice span {
+    color: var(--text-secondary);
+  }
+
+  .wave-link {
     display: flex;
     align-items: center;
     gap: 0.375rem;
-  }
-  
-  .date-input-group label {
-    font-size: 0.75rem;
-    color: var(--gray-600);
+    color: var(--primary-500);
+    text-decoration: none;
     font-weight: 500;
+    transition: color var(--transition-base);
   }
-  
-  .date-input-group input[type="date"] {
-    padding: 0.375rem 0.625rem;
-    border: 1px solid var(--gray-300);
-    border-radius: 8px;
-    font-size: 0.8125rem;
-    background: white;
-    color: var(--gray-900);
-    min-width: 120px;
+
+  .wave-link:hover {
+    color: var(--primary-600);
   }
-  
-  .date-input-group input[type="date"]:focus {
-    outline: none;
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-  
-  .date-edit-actions {
-    display: flex;
-    gap: 0.375rem;
-  }
-  
-  .date-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  
-  .date-btn.save {
-    color: var(--success-600);
-  }
-  
-  .date-btn.save:hover {
-    background: var(--success-100);
-  }
-  
-  .date-btn.cancel {
-    color: var(--danger-600);
-  }
-  
-  .date-btn.cancel:hover {
-    background: var(--danger-100);
-  }
-  
+
+  /* Actions */
   .job-actions {
     display: flex;
-    gap: 0.5rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--gray-200);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
   }
-  
+
   .action-btn {
     flex: 1;
-    padding: 0.625rem 0.875rem;
-    background: var(--gray-100);
-    border: none;
-    border-radius: 12px;
-    color: var(--gray-700);
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    font-family: inherit;
+    padding: 0.625rem;
+    background: var(--gray-100);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
   }
-  
+
   .action-btn:hover {
     background: var(--gray-200);
+    color: var(--text-primary);
   }
-  
-  .action-btn.primary {
-    background: var(--primary-100);
-    color: var(--primary-700);
-  }
-  
-  .action-btn.primary:hover {
-    background: var(--primary-200);
-  }
-  
-  .action-btn.sent {
-    background: var(--success-100);
-    color: var(--success-700);
-  }
-  
-  .action-btn.sent:hover {
-    background: var(--success-200);
-  }
-  
-  .action-count {
-    background: var(--gray-700);
-    color: white;
-    padding: 0.125rem 0.375rem;
-    border-radius: 10px;
-    font-size: 0.75rem;
-    min-width: 1.25rem;
-    text-align: center;
-  }
-  
-  .invoice-id {
-    font-size: 0.75rem;
-    font-family: monospace;
-  }
-  
-  /* Form styles */
-  form {
+
+  /* Footer */
+  .job-footer {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 0.75rem;
   }
-  
-  .form-group {
+
+  .delete-btn {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem;
+    background: transparent;
+    border: 1px solid var(--danger-500);
+    border-radius: var(--radius-md);
+    color: var(--danger-500);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-base);
   }
-  
+
+  .delete-btn:hover {
+    background: var(--danger-500);
+    color: white;
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+
+  :global(.empty-icon) {
+    color: var(--text-tertiary);
+    margin-bottom: 1rem;
+  }
+
+  .empty-state h3 {
+    font-size: 1.25rem;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .empty-state p {
+    margin: 0 0 1.5rem 0;
+  }
+
+  /* Spinner */
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--primary-500);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Forms */
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .form-group input[type="text"],
+  .form-group input[type="date"],
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    font-size: 0.9375rem;
+    background: white;
+    transition: all var(--transition-base);
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .form-group small {
+    display: block;
+    font-size: 0.8125rem;
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+  }
+
   .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
   }
-  
-  label {
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .form-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+  }
+
+  .form-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--gray-100);
+    padding: 0.25rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+  }
+
+  .form-tab {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+  }
+
+  .form-tab.active {
+    background: white;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-group label {
+    display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--gray-700);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
   }
-  
-  input[type="text"],
-  input[type="date"],
-  select {
-    padding: 0.875rem 1rem;
-    border: 1px solid var(--gray-300);
-    border-radius: 12px;
-    font-size: 0.9375rem;
-    transition: all 0.2s;
-    background: white;
-    color: var(--gray-900);
-  }
-  
-  input[type="text"]:focus,
-  input[type="date"]:focus,
-  select:focus {
-    outline: none;
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
-  }
-  
-  .checkbox label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: normal;
-    cursor: pointer;
-  }
-  
-  input[type="checkbox"] {
-    width: 1.25rem;
-    height: 1.25rem;
-    cursor: pointer;
-    accent-color: var(--primary-500);
-  }
-  
-  .error-message {
-    background: var(--danger-50);
-    border: 1px solid var(--danger-200);
-    color: var(--danger-700);
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
     font-size: 0.875rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    background: white;
+    transition: all var(--transition-base);
   }
-  
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .form-group small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin-top: 0.25rem;
+  }
+
+  .error-message {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--danger-500);
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+
+  /* Responsive */
+  @media (max-width: 1200px) {
+    .jobs-grid {
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    }
+  }
+
   @media (max-width: 768px) {
-    .jobs-page {
+    .dashboard {
       padding: 1rem;
     }
-    
-    .page-header {
+
+    .dashboard-header {
       flex-direction: column;
-      align-items: flex-start;
+      align-items: start;
       gap: 1rem;
     }
-    
+
     .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: 1fr 1fr;
     }
-    
+
+    .controls {
+      flex-direction: column;
+    }
+
+    .search-wrapper {
+      max-width: 100%;
+    }
+
+    .filter-tabs {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .jobs-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .job-header h3 {
+      font-size: 1rem;
+    }
+    
+    .amount {
+      font-size: 1.5rem;
     }
   }
 </style>

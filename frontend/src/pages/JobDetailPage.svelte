@@ -1,23 +1,54 @@
 <script lang="ts">
-  import { jobsStore } from '../lib/stores';
+  import { onMount } from 'svelte';
+  import { jobsStore, jobs, customersStore, templates } from '../lib/stores';
   import { router } from '../lib/router';
   import { Card, Button, QuantityPicker, PhotoCaptureModal, PhotoGallery } from '../lib/components';
   import { PhotoService } from '../lib/services/photoService';
   import { Camera } from 'lucide-svelte';
+  import type { Job, Customer, JobTemplate } from '../lib/types/models';
   
   export let jobId: string = '';
   
-  $: job = $jobsStore.find(j => j.id === jobId);
+  let job: Job | undefined;
+  let customer: Customer | undefined;
+  let template: JobTemplate | undefined;
+  let loading = true;
+  let error: string | null = null;
+  
+  onMount(async () => {
+    try {
+      // Load job details
+      await jobsStore.loadById(jobId);
+      job = $jobs.find(j => j.id === jobId);
+      
+      if (job) {
+        // Load customer details
+        await customersStore.loadById(job.customerId);
+        customer = $customersStore.customers.find(c => c.id === job!.customerId);
+        
+        // Load template details
+        template = $templates.find(t => t.id === job!.templateId);
+      }
+      
+      loading = false;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to load job details';
+      loading = false;
+    }
+  });
   
   let showPhotoCapture = false;
   let isUploadingPhotos = false;
   
-  function handleQuantityChange(jobItemId: string, newQuantity: number) {
-    jobsStore.updateItemQuantity(jobId, jobItemId, newQuantity);
-  }
-  
-  function handlePhaseToggle(phaseId: string, isCompleted: boolean) {
-    jobsStore.updatePhase(jobId, phaseId, isCompleted);
+  async function handleQuantityChange(jobItemId: string, newQuantity: number) {
+    try {
+      await jobsStore.updateJobItem(jobId, jobItemId, newQuantity);
+      // Reload job to get updated data
+      await jobsStore.loadById(jobId);
+      job = $jobs.find(j => j.id === jobId);
+    } catch (error) {
+      console.error('Failed to update item quantity:', error);
+    }
   }
   
   function openGPS(address: string) {
@@ -27,20 +58,31 @@
   
   function calculateProgress() {
     if (!job) return 0;
-    const totalItems = job.items.reduce((sum, item) => sum + item.quantity, 0);
-    const installedItems = job.items.reduce((sum, item) => sum + item.installedQuantity, 0);
-    return totalItems > 0 ? Math.round((installedItems / totalItems) * 100) : 0;
+    // For now, base progress on job status
+    switch (job.status) {
+      case 'scheduled': return 0;
+      case 'in_progress': return 50;
+      case 'completed': return 100;
+      case 'cancelled': return 0;
+      default: return 0;
+    }
   }
   
   async function handlePhotosCapture(event: CustomEvent<{ files: File[] }>) {
     const files = event.detail.files;
-    if (files.length === 0) return;
+    if (files.length === 0 || !job) return;
     
     isUploadingPhotos = true;
     try {
-      const uploadedPhotos = await PhotoService.uploadPhotos(jobId, files);
-      const photoUrls = uploadedPhotos.map(p => p.url);
-      jobsStore.addPhotos(jobId, photoUrls);
+      // For now, just create URLs and add them to the job
+      // TODO: Implement actual photo upload to R2
+      for (const file of files) {
+        const url = URL.createObjectURL(file);
+        await jobsStore.addPhoto(jobId, url, '');
+      }
+      // Reload job to get updated photos
+      await jobsStore.loadById(jobId);
+      job = $jobs.find(j => j.id === jobId);
     } catch (error) {
       console.error('Error uploading photos:', error);
     } finally {
@@ -51,38 +93,52 @@
   async function handlePhotosDelete(event: CustomEvent<{ ids: string[] }>) {
     if (!job) return;
     
-    const photosToDelete = job.photos.filter((_, index) => 
-      event.detail.ids.includes(`photo_${index}`)
-    );
-    
-    await PhotoService.deletePhotos(event.detail.ids);
-    jobsStore.removePhotos(jobId, photosToDelete);
+    try {
+      for (const id of event.detail.ids) {
+        const photoId = id.replace('photo_', '');
+        await jobsStore.removePhoto(jobId, photoId);
+      }
+      // Reload job to get updated photos
+      await jobsStore.loadById(jobId);
+      job = $jobs.find(j => j.id === jobId);
+    } catch (error) {
+      console.error('Failed to delete photos:', error);
+    }
   }
   
   async function handlePhotosDownload(event: CustomEvent<{ ids: string[] }>) {
     if (!job) return;
     
     const photosToDownload = job.photos
-      .map((url, index) => ({
-        id: `photo_${index}`,
-        url,
-        name: `job_${jobId}_photo_${index + 1}.jpg`
-      }))
-      .filter(p => event.detail.ids.includes(p.id));
+      .filter(photo => event.detail.ids.includes(`photo_${photo.id}`))
+      .map(photo => ({
+        id: photo.id,
+        url: photo.url,
+        name: `job_${jobId}_photo_${photo.id}.jpg`
+      }));
     
     await PhotoService.downloadPhotos(photosToDownload);
   }
   
   $: progress = calculateProgress();
-  $: galleryPhotos = job?.photos?.map((url, index) => ({
-    id: `photo_${index}`,
-    url,
-    thumbnail: url,
-    name: `Photo ${index + 1}`
+  $: galleryPhotos = job?.photos?.map(photo => ({
+    id: `photo_${photo.id}`,
+    url: photo.url,
+    thumbnail: photo.url,
+    name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
   })) || [];
 </script>
 
-{#if !job}
+{#if loading}
+  <div class="loading-state">
+    <p>Loading job details...</p>
+  </div>
+{:else if error}
+  <div class="error-state">
+    <p>{error}</p>
+    <Button on:click={() => router.navigate('jobs')}>Back to Jobs</Button>
+  </div>
+{:else if !job}
   <div class="error-state">
     <p>Job not found</p>
     <Button on:click={() => router.navigate('jobs')}>Back to Jobs</Button>
@@ -93,7 +149,7 @@
       <Button variant="secondary" on:click={() => router.navigate('jobs')}>
         ← Back
       </Button>
-      <h1>{job.customer.name}</h1>
+      <h1>{customer?.name || 'Unknown Customer'}</h1>
     </div>
     
     <button 
@@ -125,18 +181,13 @@
           {#each job.items as jobItem}
             <div class="item-row">
               <div class="item-info">
-                <div class="item-name">{jobItem.item.name}</div>
+                <div class="item-name">{jobItem.nickname || jobItem.name}</div>
                 <div class="item-meta">
-                  Total: {jobItem.quantity} {jobItem.item.unit}
-                  {#if jobItem.installedQuantity > 0}
-                    <span class="installed">
-                      ({jobItem.installedQuantity} installed)
-                    </span>
-                  {/if}
+                  Price: ${jobItem.price.toFixed(2)} × {jobItem.quantity} = ${jobItem.total.toFixed(2)}
                 </div>
               </div>
               <QuantityPicker
-                value={jobItem.installedQuantity}
+                value={jobItem.quantity}
                 min={0}
                 max={jobItem.quantity * 2}
                 on:change={(e) => handleQuantityChange(jobItem.id, e.detail)}
@@ -181,7 +232,8 @@
     margin: 0 auto;
   }
   
-  .error-state {
+  .error-state,
+  .loading-state {
     text-align: center;
     padding: 4rem 2rem;
   }

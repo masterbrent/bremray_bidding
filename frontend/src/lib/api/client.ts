@@ -11,8 +11,21 @@ export class ApiError extends Error {
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new ApiError(response.status, error.error || 'Request failed');
+    let errorMessage = 'Request failed';
+    try {
+      // Try to parse as JSON first
+      const errorData = await response.json();
+      errorMessage = errorData.error || errorData.message || errorMessage;
+    } catch {
+      // If not JSON, try to get text
+      try {
+        errorMessage = await response.text();
+      } catch {
+        // Fallback to status text
+        errorMessage = response.statusText || `HTTP ${response.status}`;
+      }
+    }
+    throw new ApiError(response.status, errorMessage);
   }
   
   // Handle 204 No Content

@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type Route = 'jobs' | 'items' | 'templates' | 'job-detail';
+export type Route = 'jobs' | 'items' | 'templates' | 'job-detail' | 'settings';
 
 interface RouterState {
   route: Route;

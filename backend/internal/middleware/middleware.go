@@ -3,14 +3,42 @@ package middleware
 import (
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
 // CORS adds CORS headers to responses
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Allow requests from the frontend dev server
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// Get allowed origins from environment variable
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		if allowedOrigins == "" {
+			// Default to * for development only
+			allowedOrigins = "*"
+		}
+		
+		// Check if the request origin is allowed
+		origin := r.Header.Get("Origin")
+		if allowedOrigins == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else {
+			// Check if origin is in the allowed list
+			allowed := false
+			for _, allowedOrigin := range strings.Split(allowedOrigins, ",") {
+				if strings.TrimSpace(allowedOrigin) == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					allowed = true
+					break
+				}
+			}
+			if !allowed && origin != "" {
+				// Origin not allowed, don't set CORS headers
+				http.Error(w, "Origin not allowed", http.StatusForbidden)
+				return
+			}
+		}
+		
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
 		w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours

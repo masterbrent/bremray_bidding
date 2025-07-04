@@ -1,18 +1,20 @@
 <script lang="ts">
-  export let variant: 'primary' | 'secondary' | 'danger' | 'ghost' = 'primary';
-  export let size: 'small' | 'medium' | 'large' = 'medium';
-  export let disabled: boolean = false;
+  export let variant: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success' = 'primary';
+  export let size: 'sm' | 'md' | 'lg' = 'md';
+  export let fullWidth = false;
+  export let disabled = false;
+  export let loading = false;
+  export let icon = false;
   export let type: 'button' | 'submit' | 'reset' = 'button';
-  export let fullWidth: boolean = false;
-  export let loading: boolean = false;
 </script>
 
 <button
   {type}
-  {disabled}
-  class="button {variant} {size}"
-  class:full-width={fullWidth}
-  class:loading
+  class="btn btn-{variant} btn-{size}"
+  class:btn-full={fullWidth}
+  class:btn-icon={icon}
+  class:btn-loading={loading}
+  disabled={disabled || loading}
   on:click
 >
   {#if loading}
@@ -22,149 +24,142 @@
 </button>
 
 <style>
-  .button {
+  .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border: none;
-    border-radius: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0 1.25rem;
+    height: 40px;
     font-family: inherit;
+    font-weight: 500;
+    font-size: 0.875rem;
+    line-height: 1;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-base);
     position: relative;
-    overflow: hidden;
-    letter-spacing: -0.01em;
+    white-space: nowrap;
   }
-  
-  .button::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
+
+  /* Size variants */
+  .btn-sm {
+    height: 32px;
+    padding: 0 1rem;
+    font-size: 0.8125rem;
   }
-  
-  .button:active::before {
-    width: 300px;
-    height: 300px;
+
+  .btn-lg {
+    height: 48px;
+    padding: 0 1.5rem;
+    font-size: 0.9375rem;
   }
-  
-  .button:disabled {
+
+  /* Icon button */
+  .btn-icon {
+    width: 40px;
+    padding: 0;
+  }
+
+  .btn-icon.btn-sm {
+    width: 32px;
+  }
+
+  .btn-icon.btn-lg {
+    width: 48px;
+  }
+
+  /* Color variants */
+  .btn-primary {
+    background: var(--primary-500);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-600);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-secondary {
+    background: var(--gray-100);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--gray-200);
+  }
+
+  .btn-success {
+    background: var(--success-500);
+    color: white;
+  }
+
+  .btn-success:hover:not(:disabled) {
+    background: var(--success-600);
+  }
+
+  .btn-danger {
+    background: var(--danger-500);
+    color: white;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger-600);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--gray-100);
+    color: var(--text-primary);
+  }
+
+  /* States */
+  .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  
-  .button.loading {
-    color: transparent;
+
+  .btn-full {
+    width: 100%;
   }
-  
+
+  .btn:focus-visible {
+    outline: 2px solid var(--primary-500);
+    outline-offset: 2px;
+  }
+
+  /* Loading spinner */
   .spinner {
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
-  
+
+  .btn-loading {
+    color: transparent;
+  }
+
+  .btn-loading .spinner {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+
   @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-  
-  .button.full-width {
-    width: 100%;
-  }
-  
-  /* Sizes */
-  .button.small {
-    padding: 0.625rem 1.25rem;
-    font-size: 0.875rem;
-    min-height: 40px;
-  }
-  
-  .button.medium {
-    padding: 0.875rem 1.75rem;
-    font-size: 0.9375rem;
-    min-height: 48px;
-  }
-  
-  .button.large {
-    padding: 1.125rem 2.25rem;
-    font-size: 1.0625rem;
-    min-height: 56px;
-  }
-  
-  /* Variants */
-  .button.primary {
-    background: var(--primary-500);
-    color: white;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-  
-  .button.primary:hover:not(:disabled) {
-    background: var(--primary-600);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px 0 rgba(59, 130, 246, 0.25);
-  }
-  
-  .button.primary:active:not(:disabled) {
-    transform: translateY(0);
-  }
-  
-  .button.secondary {
-    background: var(--card-bg);
-    color: var(--gray-700);
-    border: 1px solid var(--gray-300);
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-  
-  .button.secondary:hover:not(:disabled) {
-    background: var(--gray-50);
-    border-color: var(--gray-400);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  }
-  
-  .button.secondary:active:not(:disabled) {
-    transform: translateY(0);
-  }
-  
-  .button.danger {
-    background: var(--danger-500);
-    color: white;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-  
-  .button.danger:hover:not(:disabled) {
-    background: var(--danger-600);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px 0 rgba(239, 68, 68, 0.25);
-  }
-  
-  .button.danger:active:not(:disabled) {
-    transform: translateY(0);
-  }
-  
-  .button.ghost {
-    background: transparent;
-    color: var(--gray-600);
-    box-shadow: none;
-  }
-  
-  .button.ghost:hover:not(:disabled) {
-    background: var(--gray-100);
-    color: var(--gray-900);
-  }
-  
-  .button.ghost:active:not(:disabled) {
-    background: var(--gray-200);
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

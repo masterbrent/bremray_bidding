@@ -19,6 +19,7 @@
   
   let formData = {
     name: '',
+    nickname: '',
     description: '',
     unit: 'each' as Item['unit'],
     unitPrice: 0,
@@ -28,6 +29,7 @@
   function openAddModal() {
     formData = {
       name: '',
+      nickname: '',
       description: '',
       unit: 'each',
       unitPrice: 0,
@@ -41,6 +43,7 @@
   function openEditModal(item: Item) {
     formData = {
       name: item.name,
+      nickname: item.nickname || '',
       description: item.description || '',
       unit: item.unit,
       unitPrice: item.unitPrice,
@@ -147,6 +150,9 @@
               <div class="table-row">
                 <div class="item-name">
                   <span class="name">{item.name}</span>
+                  {#if item.nickname}
+                    <span class="nickname">Display as: {item.nickname}</span>
+                  {/if}
                   {#if item.description}
                     <span class="description">{item.description}</span>
                   {/if}
@@ -197,6 +203,17 @@
         bind:value={formData.name}
         required
       />
+    </div>
+    
+    <div class="form-group">
+      <label for="nickname">Display Name (Nickname)</label>
+      <input
+        id="nickname"
+        type="text"
+        bind:value={formData.nickname}
+        placeholder="e.g., 'Wafers' for '4&quot; Recessed LED Lights'"
+      />
+      <small>This name will be shown on job cards for easier reading</small>
     </div>
     
     <div class="form-group">
@@ -357,6 +374,18 @@
   .item-name .description {
     font-size: 0.875rem;
     color: #6b7280;
+  }
+  
+  .item-name .nickname {
+    font-size: 0.875rem;
+    color: #059669;
+    font-style: italic;
+  }
+  
+  small {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
   }
   
   .unit {

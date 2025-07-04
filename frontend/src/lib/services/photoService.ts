@@ -1,5 +1,5 @@
-// Mock photo service for R2 integration
-// In production, this would handle actual uploads to Cloudflare R2
+// Photo service for handling photo uploads and downloads
+// Currently uses object URLs, will be updated for R2 integration
 
 export interface UploadedPhoto {
   id: string;
@@ -9,7 +9,7 @@ export interface UploadedPhoto {
 }
 
 export class PhotoService {
-  // Mock upload to R2
+  // Upload photos (currently creates object URLs, will be updated for R2)
   static async uploadPhotos(jobId: string, files: File[]): Promise<UploadedPhoto[]> {
     // In production, this would:
     // 1. Get presigned URLs from backend
@@ -36,10 +36,10 @@ export class PhotoService {
     return uploadedPhotos;
   }
   
-  // Mock delete from R2
+  // Delete photos (placeholder for R2 integration)
   static async deletePhotos(photoIds: string[]): Promise<void> {
-    // In production, this would delete from R2
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Currently a no-op, will be implemented with R2 integration
+    console.log('Photo deletion will be implemented with R2 integration', photoIds);
   }
   
   // Download photo

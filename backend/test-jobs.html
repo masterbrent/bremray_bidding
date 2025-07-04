@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Jobs & Templates API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; }
+        button { margin: 5px; padding: 10px; }
+        pre { background: #f4f4f4; padding: 10px; overflow: auto; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Jobs & Templates API Test</h1>
+    
+    <div class="section">
+        <h2>1. Create Test Customer</h2>
+        <button onclick="createCustomer()">Create Customer</button>
+        <pre id="customer-result"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>2. Create Template</h2>
+        <button onclick="createTemplate()">Create Template</button>
+        <pre id="template-result"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>3. List Templates</h2>
+        <button onclick="listTemplates()">List Templates</button>
+        <pre id="templates-list"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>4. Create Job</h2>
+        <button onclick="createJob()">Create Job</button>
+        <pre id="job-result"></pre>
+    </div>
+    
+    <div class="section">
+        <h2>5. List Jobs</h2>
+        <button onclick="listJobs()">List Jobs</button>
+        <pre id="jobs-list"></pre>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/api';
+        let testCustomerId = '';
+        let testTemplateId = '';
+        let testItemId = '';
+        
+        async function createCustomer() {
+            try {
+                const response = await fetch(`${API_URL}/customers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: 'John Doe',
+                        email: 'john.doe@example.com',
+                        phone: '555-1234'
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to create customer');
+                
+                testCustomerId = data.id;
+                document.getElementById('customer-result').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('customer-result').className = 'success';
+            } catch (error) {
+                document.getElementById('customer-result').textContent = `Error: ${error.message}`;
+                document.getElementById('customer-result').className = 'error';
+            }
+        }
+        
+        async function createTemplate() {
+            try {
+                // First get an item to use in the template
+                const itemsRes = await fetch(`${API_URL}/items`);
+                const items = await itemsRes.json();
+                if (items.length === 0) {
+                    throw new Error('No items found. Please create an item first.');
+                }
+                testItemId = items[0].id;
+                
+                const response = await fetch(`${API_URL}/templates`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: 'Basic Outlet Installation',
+                        description: 'Install a standard electrical outlet',
+                        items: [
+                            { itemId: testItemId, defaultQuantity: 2 }
+                        ]
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to create template');
+                
+                testTemplateId = data.id;
+                document.getElementById('template-result').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('template-result').className = 'success';
+            } catch (error) {
+                document.getElementById('template-result').textContent = `Error: ${error.message}`;
+                document.getElementById('template-result').className = 'error';
+            }
+        }
+        
+        async function listTemplates() {
+            try {
+                const response = await fetch(`${API_URL}/templates`);
+                const data = await response.json();
+                
+                document.getElementById('templates-list').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('templates-list').className = 'success';
+            } catch (error) {
+                document.getElementById('templates-list').textContent = `Error: ${error.message}`;
+                document.getElementById('templates-list').className = 'error';
+            }
+        }
+        
+        async function createJob() {
+            if (!testCustomerId || !testTemplateId) {
+                alert('Please create customer and template first!');
+                return;
+            }
+            
+            try {
+                const scheduledDate = new Date();
+                scheduledDate.setDate(scheduledDate.getDate() + 7); // Schedule for next week
+                
+                const response = await fetch(`${API_URL}/jobs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerId: testCustomerId,
+                        templateId: testTemplateId,
+                        address: '123 Main St, City, State 12345',
+                        scheduledDate: scheduledDate.toISOString(),
+                        notes: 'Test job created via API'
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to create job');
+                
+                document.getElementById('job-result').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('job-result').className = 'success';
+            } catch (error) {
+                document.getElementById('job-result').textContent = `Error: ${error.message}`;
+                document.getElementById('job-result').className = 'error';
+            }
+        }
+        
+        async function listJobs() {
+            try {
+                const response = await fetch(`${API_URL}/jobs`);
+                const data = await response.json();
+                
+                document.getElementById('jobs-list').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('jobs-list').className = 'success';
+            } catch (error) {
+                document.getElementById('jobs-list').textContent = `Error: ${error.message}`;
+                document.getElementById('jobs-list').className = 'error';
+            }
+        }
+    </script>
+</body>
+</html>

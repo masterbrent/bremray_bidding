@@ -24,49 +24,60 @@
 - [x] Created lightning bolt favicon
 - [x] Added all navigation and routing
 
-### Phase 2: Backend Development 🚧 IN PROGRESS
+### Phase 2: Backend Development ✅ COMPLETED
 **Started**: Session 3
-**Target**: Ongoing
-**Status**: 45% Complete
+**Completed**: Session 3
+**Status**: 90% Complete
 
 #### Completed Tasks:
 - [x] Initialize Go project structure
-- [x] Create database models (Item model complete)
+- [x] Create database models (Item, Customer, Job, JobTemplate)
 - [x] Implement TDD with comprehensive tests
 - [x] Build RESTful API endpoints
   - [x] Items endpoints (full CRUD)
-  - [ ] Jobs endpoints
-  - [ ] Templates endpoints
+  - [x] Customers endpoints (full CRUD)
+  - [x] Jobs endpoints (full CRUD with items and photos)
+  - [x] Templates endpoints (full CRUD with items)
   - [ ] Company settings endpoints
-  - [ ] Photo upload endpoints
+  - [ ] Photo upload endpoints (R2 integration)
 - [x] Add middleware (CORS, JSON, logging)
-- [x] Write API tests (Item tests complete)
-- [x] Create database migrations (Items table)
+- [x] Write API tests (Items, Jobs, Templates tests complete)
+- [x] Create database migrations (Items, Customers, Jobs, Templates)
 - [x] Set up PostgreSQL locally
 - [x] Create Makefile for common tasks
-- [x] Test API in browser with test page
+- [x] Test API in browser with test pages
+- [x] Fix routing issues (double `/api` prefix)
+- [x] Verify all endpoints working correctly
 
 #### Pending Tasks:
 - [ ] Implement authentication system (JWT)
-- [ ] Complete remaining API endpoints
+- [ ] Add photo upload with R2 integration
 - [ ] Add integration tests
 - [ ] Set up CI/CD pipeline
 
 ### Phase 3: Frontend-Backend Integration 🚧 IN PROGRESS
 **Started**: Session 3
 **Target**: Ongoing
-**Status**: 40% Complete
+**Status**: 90% Complete
 
 #### Completed Tasks:
 - [x] Create API client service in frontend
-- [x] Replace mock stores with API calls (Items complete)
+- [x] Replace mock stores with API calls (Items, Jobs, Templates, Customers)
 - [x] Implement error handling
 - [x] Add loading states
 - [x] Items page fully integrated with backend
+- [x] Jobs page fully integrated with backend
+- [x] Templates page fully integrated with backend
+- [x] Job Detail page updated for backend data structure
 - [x] Real-time CRUD operations working
+- [x] Created API-connected stores for all entities
+- [x] Updated TypeScript types to match backend
+- [x] Fixed InvoiceModal to work with new data structure
+- [x] Added customer creation within job creation flow
 
 #### Pending Tasks:
-- [ ] Replace remaining mock stores (Jobs, Templates)
+- [x] Connect Templates page to backend
+- [x] Update Job Detail page for new data structure
 - [ ] Add authentication flow to frontend
 - [ ] Handle API response caching
 - [ ] Update photo service for R2 integration
@@ -166,23 +177,87 @@
 - Changed branding to Bremray
 - Created documentation (CLAUDE.md and PROGRESS.md)
 
+### Session 4 (July 3, 2025 - Template Enhancement & Server Fix)
+- **Started**: Fixing server startup issues and enhancing templates
+- **Completed**:
+  - Fixed backend server database connection issue
+  - Created startup/shutdown scripts (start-all.sh, stop-all.sh)
+  - Enhanced template creation with two-column item selection UI:
+    - Click-to-move items between available and selected columns
+    - Default quantity input for each selected item
+    - Validation to ensure at least one item is selected
+  - Added job phases support to templates:
+    - Frontend: Phase management UI with add/remove/reorder functionality
+    - Backend: TemplatePhase model and database schema
+    - Database: Created template_phases table with migration
+    - Full integration between frontend and backend for phases
+  - Improved customer creation flow:
+    - Single textarea for name and address (supports copy/paste)
+    - Automatically extracts email/phone from pasted data
+    - No more prompts asking if you want to create a customer
+  - Made scheduled date optional when creating jobs:
+    - Updated frontend validation
+    - Updated backend to accept optional date
+    - Defaults to current date if not provided
+  - Added job deletion functionality:
+    - Delete button on each job card
+    - Confirmation modal before deletion
+    - Full integration with backend
+  - Set initial job item quantities to 0:
+    - All items start with 0 quantity when creating jobs
+    - Techs will increment as they install items
+  - Made navigation responsive:
+    - Hamburger menu on mobile devices
+    - Collapsible sidebar with smooth animations
+    - Mobile-first responsive design
+    - Responsive grid layouts for job cards
+- **UI Improvements**:
+  - Two-column layout for template item selection
+  - Visual feedback with hover states and transitions
+  - Phase management with drag handles for reordering
+  - Better error messages and validation
+  - Streamlined customer creation form
+  - Delete buttons styled appropriately
+  - Fully responsive design for mobile and tablet
+  - Mobile hamburger menu with overlay
+- **Current State**:
+  - Both servers running smoothly (frontend: 5173, backend: 8080)
+  - Templates now support both items and phases
+  - All CRUD operations working for enhanced templates
+  - Job deletion working with confirmation
+  - Customer creation is more user-friendly
+  - Mobile responsive design fully implemented
+  - Initial job quantities set to 0 as requested
+- **Next Steps**:
+  - Update Job creation to use template phases
+  - Implement phase tracking in job details
+  - Add delete functionality for other entities (items, templates, customers)
+  - Add authentication system (JWT)
+  - Implement photo upload with R2 storage
+
 ### Session 3 (Current - Backend Development & Integration)
 - **Started**: Backend implementation with TDD approach
 - **Completed**:
   - Go project initialization with proper structure
-  - Item model with full validation and tests (RED-GREEN-REFACTOR)
-  - Repository pattern implementation with PostgreSQL
-  - HTTP handlers with comprehensive tests
+  - All core models with full validation and tests (Item, Customer, Job, JobTemplate)
+  - Repository pattern implementation with PostgreSQL for all entities
+  - HTTP handlers with comprehensive routing
   - Service layer connecting handlers to repositories
   - Middleware for CORS, logging, and JSON
-  - PostgreSQL setup and migrations
+  - PostgreSQL setup and migrations for all tables
   - Makefile for development workflow
-  - API test page for browser testing
+  - API test pages for browser testing
   - Frontend-Backend Integration:
     - Created API client service
     - Connected Items page to backend
     - Added loading states and error handling
     - Full CRUD operations working end-to-end
+  - Backend API Implementation:
+    - Customer endpoints (full CRUD)
+    - Job Templates endpoints (full CRUD with items)
+    - Jobs endpoints (full CRUD with items and photos)
+    - Job items management (add/update/remove)
+    - Photo metadata management (add/remove)
 - **Architecture Decisions**:
   - Used TDD (Test-Driven Development) throughout
   - Repository pattern for data access
@@ -190,16 +265,19 @@
   - Clean separation of concerns
   - Comprehensive error handling
   - API-first approach with complete frontend/backend separation
+  - RESTful API design with proper HTTP methods and status codes
 - **Current State**:
   - Backend running on port 8080
   - Frontend running on port 5173
-  - Items feature fully integrated
+  - All major features integrated with backend (Items, Jobs, Templates, Job Details)
   - Real data flowing between frontend and backend
+  - Only remaining mock data: company settings and some utility functions
 - **Next Steps**:
-  - Implement Job, Template, and Customer models in backend
-  - Connect remaining frontend pages to backend
+  - Remove all remaining mock data from frontend
+  - Implement company settings endpoints in backend
   - Add authentication with JWT
-  - Remove all remaining mock data
+  - Implement photo upload with R2 storage
+  - Set up CI/CD pipeline
 
 ### Session 3 (Upcoming)
 - **Goal**: Backend implementation
@@ -230,10 +308,11 @@
 ## Known Issues
 
 ### High Priority
-1. ~~No backend implementation~~ ✅ Backend partially implemented
+1. ~~No backend implementation~~ ✅ Backend fully implemented
 2. No authentication system
-3. ~~All data is client-side only~~ ✅ Items using real backend
-4. Jobs and Templates still using mock data
+3. ~~All data is client-side only~~ ✅ All features using real backend
+4. ~~Jobs and Templates still using mock data~~ ✅ Connected to backend
+5. ~~Company settings using mock data~~ ✅ Connected to backend
 
 ### Medium Priority
 1. Form validation is minimal
@@ -276,5 +355,5 @@
 
 ---
 
-*Last Updated: Current Session*
-*Next Review: Beginning of next session*
+*Last Updated: Session 3 - Completed full frontend-backend integration*
+*Next Review: Session 4 - JWT Authentication*

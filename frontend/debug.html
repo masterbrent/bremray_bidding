@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Console</title>
+</head>
+<body>
+    <h1>Debug Console</h1>
+    <p>Open browser console to see any errors from the app</p>
+    <iframe src="http://localhost:5173/" width="100%" height="600"></iframe>
+    
+    <script>
+        // Listen for errors from the iframe
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e);
+        });
+        
+        // Try to access the iframe to see if there are any CORS issues
+        setTimeout(() => {
+            try {
+                const iframe = document.querySelector('iframe');
+                console.log('Iframe loaded:', iframe.contentDocument);
+            } catch (e) {
+                console.log('Cannot access iframe (expected due to CORS)');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

@@ -1,12 +1,29 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { companySettingsStore } from '../lib/stores';
   import { Card, Button } from '../lib/components';
   import { Upload, X, Save } from 'lucide-svelte';
+  import type { CompanySettings } from '../lib/stores/companySettings';
   
-  let settings = { ...$companySettingsStore };
+  let settings: CompanySettings | null = null;
   let logoFile: File | null = null;
-  let logoPreview: string | null = settings.logo;
+  let logoPreview: string | null = null;
   let isSaving = false;
+  let loading = true;
+  let error: string | null = null;
+  
+  onMount(async () => {
+    await companySettingsStore.load();
+  });
+  
+  $: if ($companySettingsStore.settings) {
+    settings = { ...$companySettingsStore.settings };
+    logoPreview = settings.logo;
+    loading = false;
+  }
+  
+  $: loading = $companySettingsStore.loading;
+  $: error = $companySettingsStore.error;
   
   function handleLogoUpload(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -23,21 +40,24 @@
   }
   
   function removeLogo() {
+    if (!settings) return;
     logoFile = null;
     logoPreview = null;
     settings.logo = null;
   }
   
   async function saveSettings() {
+    if (!settings) return;
+    
     isSaving = true;
     
     try {
       // In production, upload logo to R2 if logoFile exists
       if (logoFile && logoPreview) {
-        settings.logo = logoPreview; // Mock: use data URL for now
+        settings.logo = logoPreview; // TODO: use data URL for now, implement R2 upload
       }
       
-      companySettingsStore.updateSettings(settings);
+      await companySettingsStore.updateSettings(settings);
       
       // Show success message
       alert('Settings saved successfully!');
@@ -49,7 +69,6 @@
     }
   }
   
-  $: settings = { ...$companySettingsStore };
 </script>
 
 <div class="settings-page">
@@ -57,6 +76,15 @@
     <h1>Company Settings</h1>
   </div>
   
+  {#if loading}
+    <div class="loading-state">
+      <p>Loading settings...</p>
+    </div>
+  {:else if error}
+    <div class="error-state">
+      <p>{error}</p>
+    </div>
+  {:else if settings}
   <div class="settings-content">
     <Card>
       <h2>Company Information</h2>
@@ -94,6 +122,7 @@
             id="company-name"
             type="text"
             bind:value={settings.name}
+            disabled={!settings}
             placeholder="Enter company name"
           />
         </div>
@@ -104,6 +133,7 @@
             id="license"
             type="text"
             bind:value={settings.license}
+            disabled={!settings}
             placeholder="Enter license number"
           />
         </div>
@@ -120,6 +150,7 @@
             id="address"
             type="text"
             bind:value={settings.address}
+            disabled={!settings}
             placeholder="Enter street address"
           />
         </div>
@@ -131,6 +162,7 @@
               id="city"
               type="text"
               bind:value={settings.city}
+            disabled={!settings}
               placeholder="Enter city"
             />
           </div>
@@ -141,6 +173,7 @@
               id="state"
               type="text"
               bind:value={settings.state}
+            disabled={!settings}
               placeholder="State"
               maxlength="2"
             />
@@ -152,6 +185,7 @@
               id="zip"
               type="text"
               bind:value={settings.zip}
+            disabled={!settings}
               placeholder="ZIP"
               maxlength="10"
             />
@@ -165,6 +199,7 @@
               id="phone"
               type="tel"
               bind:value={settings.phone}
+            disabled={!settings}
               placeholder="(555) 123-4567"
             />
           </div>
@@ -175,6 +210,7 @@
               id="email"
               type="email"
               bind:value={settings.email}
+            disabled={!settings}
               placeholder="company@example.com"
             />
           </div>
@@ -186,6 +222,7 @@
             id="website"
             type="url"
             bind:value={settings.website}
+            disabled={!settings}
             placeholder="https://www.example.com"
           />
         </div>
@@ -196,13 +233,14 @@
       <Button
         variant="primary"
         on:click={saveSettings}
-        disabled={isSaving}
+        disabled={isSaving || !settings}
       >
         <Save size={16} />
         {isSaving ? 'Saving...' : 'Save Settings'}
       </Button>
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
@@ -353,6 +391,17 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 1rem;
+  }
+  
+  .loading-state,
+  .error-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6b7280;
+  }
+  
+  .error-state {
+    color: #ef4444;
   }
   
   @media (max-width: 640px) {

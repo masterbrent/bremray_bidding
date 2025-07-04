@@ -24,13 +24,14 @@ func (r *itemRepository) Create(ctx context.Context, item *models.Item) error {
 	}
 
 	query := `
-		INSERT INTO items (id, name, unit, unit_price, category, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO items (id, name, nickname, unit, unit_price, category, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
 	_, err := r.db.ExecContext(ctx, query,
 		item.ID,
 		item.Name,
+		item.Nickname,
 		item.Unit,
 		item.UnitPrice,
 		item.Category,
@@ -56,7 +57,7 @@ func (r *itemRepository) GetByID(ctx context.Context, id string) (*models.Item, 
 	}
 
 	query := `
-		SELECT id, name, unit, unit_price, category, created_at, updated_at
+		SELECT id, name, COALESCE(nickname, '') as nickname, unit, unit_price, category, created_at, updated_at
 		FROM items
 		WHERE id = $1
 	`
@@ -65,6 +66,7 @@ func (r *itemRepository) GetByID(ctx context.Context, id string) (*models.Item, 
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&item.ID,
 		&item.Name,
+		&item.Nickname,
 		&item.Unit,
 		&item.UnitPrice,
 		&item.Category,
@@ -84,7 +86,7 @@ func (r *itemRepository) GetByID(ctx context.Context, id string) (*models.Item, 
 
 // List retrieves items with optional filtering
 func (r *itemRepository) List(ctx context.Context, filter map[string]interface{}) ([]*models.Item, error) {
-	query := `SELECT id, name, unit, unit_price, category, created_at, updated_at FROM items`
+	query := `SELECT id, name, COALESCE(nickname, '') as nickname, unit, unit_price, category, created_at, updated_at FROM items`
 	args := []interface{}{}
 	
 	// Build WHERE clause from filter
@@ -120,6 +122,7 @@ func (r *itemRepository) List(ctx context.Context, filter map[string]interface{}
 		err := rows.Scan(
 			&item.ID,
 			&item.Name,
+			&item.Nickname,
 			&item.Unit,
 			&item.UnitPrice,
 			&item.Category,
@@ -159,13 +162,14 @@ func (r *itemRepository) Update(ctx context.Context, id string, updates map[stri
 	// Update in database
 	query := `
 		UPDATE items
-		SET name = $2, unit = $3, unit_price = $4, category = $5, updated_at = $6
+		SET name = $2, nickname = $3, unit = $4, unit_price = $5, category = $6, updated_at = $7
 		WHERE id = $1
 	`
 
 	result, err := r.db.ExecContext(ctx, query,
 		item.ID,
 		item.Name,
+		item.Nickname,
 		item.Unit,
 		item.UnitPrice,
 		item.Category,
