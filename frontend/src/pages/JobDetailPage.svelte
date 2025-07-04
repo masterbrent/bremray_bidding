@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { jobsStore, jobs, customersStore, templates } from '../lib/stores';
+  import { jobsStore, jobs, customersStore, templates, userStore, effectiveRole, permissions } from '../lib/stores';
   import { router } from '../lib/router';
   import { Card, Button, QuantityPicker, PhotoCaptureModal, PhotoGallery } from '../lib/components';
   import { PhotoService } from '../lib/services/photoService';
@@ -74,17 +74,23 @@
     
     isUploadingPhotos = true;
     try {
-      // For now, just create URLs and add them to the job
-      // TODO: Implement actual photo upload to R2
-      for (const file of files) {
-        const url = URL.createObjectURL(file);
-        await jobsStore.addPhoto(jobId, url, '');
-      }
-      // Reload job to get updated photos
+      // Upload photos to backend (which handles R2 upload)
+      const uploadedPhotos = await PhotoService.uploadPhotos(jobId, files);
+      
+      // Reload job to get updated photos from backend
       await jobsStore.loadById(jobId);
       job = $jobs.find(j => j.id === jobId);
+      
+      // Update gallery photos
+      galleryPhotos = job?.photos?.map(photo => ({
+        id: photo.id,
+        url: photo.url,
+        thumbnail: photo.url,
+        name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
+      })) || [];
     } catch (error) {
       console.error('Error uploading photos:', error);
+      alert('Failed to upload photos. Please try again.');
     } finally {
       isUploadingPhotos = false;
     }
@@ -94,15 +100,23 @@
     if (!job) return;
     
     try {
-      for (const id of event.detail.ids) {
-        const photoId = id.replace('photo_', '');
-        await jobsStore.removePhoto(jobId, photoId);
-      }
+      // Delete photos via API (which also removes from R2)
+      await PhotoService.deletePhotos(jobId, event.detail.ids);
+      
       // Reload job to get updated photos
       await jobsStore.loadById(jobId);
       job = $jobs.find(j => j.id === jobId);
+      
+      // Update gallery photos
+      galleryPhotos = job?.photos?.map(photo => ({
+        id: photo.id,
+        url: photo.url,
+        thumbnail: photo.url,
+        name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
+      })) || [];
     } catch (error) {
       console.error('Failed to delete photos:', error);
+      alert('Failed to delete photos. Please try again.');
     }
   }
   
@@ -183,7 +197,11 @@
               <div class="item-info">
                 <div class="item-name">{jobItem.nickname || jobItem.name}</div>
                 <div class="item-meta">
-                  Price: ${jobItem.price.toFixed(2)} × {jobItem.quantity} = ${jobItem.total.toFixed(2)}
+                  {#if permissions.canSeePrices($effectiveRole)}
+                    Price: ${jobItem.price.toFixed(2)} × {jobItem.quantity} = ${jobItem.total.toFixed(2)}
+                  {:else}
+                    Quantity: {jobItem.quantity}
+                  {/if}
                 </div>
               </div>
               <QuantityPicker
@@ -220,7 +238,7 @@
   </div>
   
   <PhotoCaptureModal 
-    bind:open={showPhotoCapture}
+    bind:isOpen={showPhotoCapture}
     on:capture={handlePhotosCapture}
   />
 {/if}

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { router } from './lib/router';
-  import { itemsStore, jobsStore, jobTemplatesStore, companySettingsStore } from './lib/stores';
-  import { Menu, X, Briefcase, Package, FileText, Settings, Zap, BarChart3 } from 'lucide-svelte';
+  import { itemsStore, jobsStore, jobTemplatesStore, companySettingsStore, userStore, effectiveRole, permissions } from './lib/stores';
+  import { Menu, X, Briefcase, Package, FileText, Settings, Zap, BarChart3, Users } from 'lucide-svelte';
+  import StatusIndicators from './lib/components/StatusIndicators.svelte';
   
   // Import pages
   import JobsPage from './pages/JobsPage.svelte';
@@ -11,17 +12,21 @@
   import SettingsPage from './pages/SettingsPage.svelte';
   import JobDetailPage from './pages/JobDetailPage.svelte';
   import StatsPage from './pages/StatsPage.svelte';
+  import UsersPage from './pages/UsersPage.svelte';
   
   let currentRoute = 'jobs';
   let routeParams: any = {};
   let error: any = null;
   let mobileMenuOpen = false;
   
-  const navItems = [
+  $: navItems = [
     { route: 'jobs', label: 'Jobs', icon: Briefcase },
     { route: 'stats', label: 'Stats', icon: BarChart3 },
-    { route: 'items', label: 'Items', icon: Package },
-    { route: 'templates', label: 'Templates', icon: FileText },
+    ...(permissions.canEditJobs($effectiveRole) ? [
+      { route: 'items', label: 'Items', icon: Package },
+      { route: 'templates', label: 'Templates', icon: FileText },
+      { route: 'users', label: 'Users', icon: Users },
+    ] : []),
     { route: 'settings', label: 'Settings', icon: Settings },
   ];
   
@@ -32,6 +37,10 @@
   });
   
   onMount(() => {
+    // Initialize user - in production this would come from auth
+    // For testing, using a hardcoded email
+    userStore.init('brenthall@gmail.com');
+    
     // Load data from backend
     itemsStore.load().catch(e => console.error('Failed to load items:', e));
     jobsStore.load().catch(e => console.error('Failed to load jobs:', e));
@@ -90,6 +99,7 @@
     </nav>
     
     <div class="sidebar-footer">
+      <StatusIndicators />
       <div class="user-section">
         <div class="user-avatar">B</div>
         <div>
@@ -122,6 +132,8 @@
           <ItemsPage />
         {:else if currentRoute === 'templates'}
           <JobTemplatesPage />
+        {:else if currentRoute === 'users'}
+          <UsersPage />
         {:else if currentRoute === 'settings'}
           <SettingsPage />
         {:else if currentRoute === 'job-detail'}
@@ -298,6 +310,9 @@
   .sidebar-footer {
     padding: 1.5rem;
     border-top: 1px solid var(--gray-100);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
   
   .user-section {

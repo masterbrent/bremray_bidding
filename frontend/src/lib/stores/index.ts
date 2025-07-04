@@ -3,3 +3,4 @@ export { jobTemplatesStore, templates } from './jobTemplates';
 export { jobsStore, jobs } from './jobs';
 export { companySettingsStore } from './companySettings';
 export { customersStore } from './customers';
+export { userStore, effectiveRole, permissions } from './userStore';

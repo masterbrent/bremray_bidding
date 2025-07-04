@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { companySettingsStore } from '../lib/stores';
   import { Card, Button } from '../lib/components';
-  import { Upload, X, Save } from 'lucide-svelte';
+  import { Upload, X, Save, Cloud, Zap, CheckCircle, AlertCircle } from 'lucide-svelte';
   import type { CompanySettings } from '../lib/stores/companySettings';
+  import { serviceHealth } from '../lib/services/serviceHealth';
   
   let settings: CompanySettings | null = null;
   let logoFile: File | null = null;
@@ -11,6 +12,12 @@
   let isSaving = false;
   let loading = true;
   let error: string | null = null;
+  
+  // Service test states
+  let waveTestResult: 'idle' | 'testing' | 'success' | 'failed' = 'idle';
+  let cloudflareTestResult: 'idle' | 'testing' | 'success' | 'failed' = 'idle';
+  let waveTestMessage = '';
+  let cloudflareTestMessage = '';
   
   onMount(async () => {
     await companySettingsStore.load();
@@ -66,6 +73,34 @@
       alert('Error saving settings. Please try again.');
     } finally {
       isSaving = false;
+    }
+  }
+  
+  async function testWaveConnection() {
+    waveTestResult = 'testing';
+    waveTestMessage = '';
+    
+    try {
+      const connected = await serviceHealth.checkWaveConnection();
+      waveTestResult = connected ? 'success' : 'failed';
+      waveTestMessage = connected ? 'Wave API is connected' : 'Failed to connect to Wave API';
+    } catch (error) {
+      waveTestResult = 'failed';
+      waveTestMessage = 'Connection test failed';
+    }
+  }
+  
+  async function testCloudflareConnection() {
+    cloudflareTestResult = 'testing';
+    cloudflareTestMessage = '';
+    
+    try {
+      const connected = await serviceHealth.checkCloudflareConnection();
+      cloudflareTestResult = connected ? 'success' : 'failed';
+      cloudflareTestMessage = connected ? 'Cloudflare R2 is connected' : 'Failed to connect to Cloudflare R2';
+    } catch (error) {
+      cloudflareTestResult = 'failed';
+      cloudflareTestMessage = 'Connection test failed';
     }
   }
   
@@ -225,6 +260,72 @@
             disabled={!settings}
             placeholder="https://www.example.com"
           />
+        </div>
+      </div>
+    </Card>
+    
+    <Card>
+      <h2>Service Connections</h2>
+      
+      <div class="service-tests">
+        <div class="service-test">
+          <div class="service-info">
+            <Zap size={24} />
+            <div>
+              <h3>Wave API</h3>
+              <p>Accounting and invoicing integration</p>
+            </div>
+          </div>
+          <div class="test-section">
+            {#if waveTestResult === 'success'}
+              <div class="test-result success">
+                <CheckCircle size={16} />
+                {waveTestMessage}
+              </div>
+            {:else if waveTestResult === 'failed'}
+              <div class="test-result failed">
+                <AlertCircle size={16} />
+                {waveTestMessage}
+              </div>
+            {/if}
+            <Button
+              variant="secondary"
+              on:click={testWaveConnection}
+              disabled={waveTestResult === 'testing'}
+            >
+              {waveTestResult === 'testing' ? 'Testing...' : 'Test Connection'}
+            </Button>
+          </div>
+        </div>
+        
+        <div class="service-test">
+          <div class="service-info">
+            <Cloud size={24} />
+            <div>
+              <h3>Cloudflare R2</h3>
+              <p>Photo storage and delivery</p>
+            </div>
+          </div>
+          <div class="test-section">
+            {#if cloudflareTestResult === 'success'}
+              <div class="test-result success">
+                <CheckCircle size={16} />
+                {cloudflareTestMessage}
+              </div>
+            {:else if cloudflareTestResult === 'failed'}
+              <div class="test-result failed">
+                <AlertCircle size={16} />
+                {cloudflareTestMessage}
+              </div>
+            {/if}
+            <Button
+              variant="secondary"
+              on:click={testCloudflareConnection}
+              disabled={cloudflareTestResult === 'testing'}
+            >
+              {cloudflareTestResult === 'testing' ? 'Testing...' : 'Test Connection'}
+            </Button>
+          </div>
         </div>
       </div>
     </Card>
@@ -391,6 +492,66 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 1rem;
+  }
+  
+  /* Service Connections */
+  .service-tests {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  
+  .service-test {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background: var(--gray-50);
+    border-radius: 8px;
+  }
+  
+  .service-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .service-info h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  
+  .service-info p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--gray-600);
+  }
+  
+  .test-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  
+  .test-result {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .test-result.success {
+    background: #d1fae5;
+    color: #065f46;
+  }
+  
+  .test-result.failed {
+    background: #fee2e2;
+    color: #991b1b;
   }
   
   .loading-state,

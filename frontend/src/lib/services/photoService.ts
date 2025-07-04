@@ -1,5 +1,5 @@
 // Photo service for handling photo uploads and downloads
-// Currently uses object URLs, will be updated for R2 integration
+import { API_BASE_URL } from '../config';
 
 export interface UploadedPhoto {
   id: string;
@@ -9,37 +9,57 @@ export interface UploadedPhoto {
 }
 
 export class PhotoService {
-  // Upload photos (currently creates object URLs, will be updated for R2)
+  // Upload photos to backend API which handles R2 upload
   static async uploadPhotos(jobId: string, files: File[]): Promise<UploadedPhoto[]> {
-    // In production, this would:
-    // 1. Get presigned URLs from backend
-    // 2. Upload directly to R2
-    // 3. Return the final URLs
+    const formData = new FormData();
     
-    const uploadedPhotos: UploadedPhoto[] = [];
-    
+    // Add all files to the form data
     for (const file of files) {
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Create object URL for preview (in production, this would be the R2 URL)
-      const url = URL.createObjectURL(file);
-      
-      uploadedPhotos.push({
-        id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        url,
-        thumbnail: url, // In production, we'd generate actual thumbnails
-        name: file.name
-      });
+      formData.append('photos', file);
     }
     
-    return uploadedPhotos;
+    try {
+      const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/photos`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+      
+      const uploadedPhotos = await response.json();
+      
+      // Transform the response to match our interface
+      return uploadedPhotos.map((photo: any) => ({
+        id: photo.id,
+        url: photo.url,
+        thumbnail: photo.url, // Backend doesn't generate thumbnails yet
+        name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
+      }));
+    } catch (error) {
+      console.error('Error uploading photos:', error);
+      throw error;
+    }
   }
   
-  // Delete photos (placeholder for R2 integration)
-  static async deletePhotos(photoIds: string[]): Promise<void> {
-    // Currently a no-op, will be implemented with R2 integration
-    console.log('Photo deletion will be implemented with R2 integration', photoIds);
+  // Delete photos via API
+  static async deletePhotos(jobId: string, photoIds: string[]): Promise<void> {
+    try {
+      // Delete each photo
+      for (const photoId of photoIds) {
+        const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/photos/${photoId}`, {
+          method: 'DELETE',
+        });
+        
+        if (!response.ok) {
+          console.error(`Failed to delete photo ${photoId}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      throw error;
+    }
   }
   
   // Download photo

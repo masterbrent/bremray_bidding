@@ -113,6 +113,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}).Methods("GET")
+	
+	// Service health checks
+	healthHandler := handlers.NewHealthHandler()
+	api.HandleFunc("/health/wave", healthHandler.CheckWave).Methods("GET")
+	api.HandleFunc("/health/cloudflare", healthHandler.CheckCloudflare).Methods("GET")
 
 	// Start server
 	addr := fmt.Sprintf(":%s", port)

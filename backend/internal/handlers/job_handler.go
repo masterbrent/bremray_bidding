@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/masterbrent/electrical-bidding-app/internal/models"
 	"github.com/masterbrent/electrical-bidding-app/internal/repository"
+	"github.com/masterbrent/electrical-bidding-app/internal/services"
 )
 
 // JobHandler handles HTTP requests for jobs
@@ -19,6 +21,7 @@ type JobHandler struct {
 	customerRepo repository.CustomerRepository
 	templateRepo repository.JobTemplateRepository
 	itemRepo     repository.ItemRepository
+	r2Service    *services.R2Service
 }
 
 // NewJobHandler creates a new job handler
@@ -481,14 +484,14 @@ func (h *JobHandler) RemoveItem(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// AddPhoto adds a photo to a job
+// AddPhoto handles photo uploads for a job
 func (h *JobHandler) AddPhoto(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
 	jobID := vars["id"]
 	
 	// Verify job exists
-	job, err := h.jobRepo.GetByID(ctx, jobID)
+	_, err := h.jobRepo.GetByID(ctx, jobID)
 	if err != nil {
 		if err.Error() == "job not found" {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -498,33 +501,76 @@ func (h *JobHandler) AddPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	var req struct {
-		URL     string `json:"url"`
-		Caption string `json:"caption"`
-	}
-	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	// Parse multipart form (32 MB max memory)
+	err = r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 	
-	photo := &models.JobPhoto{
-		ID:         uuid.New().String(),
-		JobID:      jobID,
-		URL:        req.URL,
-		Caption:    req.Caption,
-		UploadedAt: time.Now(),
-	}
-	
-	if err := h.jobRepo.AddPhoto(ctx, jobID, photo); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	files := r.MultipartForm.File["photos"]
+	if len(files) == 0 {
+		http.Error(w, "No photos provided", http.StatusBadRequest)
 		return
 	}
 	
-	job.AddPhoto(*photo)
+	// Initialize R2 service if not already done
+	if h.r2Service == nil {
+		h.r2Service, err = services.NewR2Service()
+		if err != nil {
+			http.Error(w, "Photo upload service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	
+	var uploadedPhotos []models.JobPhoto
+	
+	// Process each file
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			http.Error(w, "Failed to open file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		
+		// Upload to R2
+		photoURL, err := h.r2Service.UploadPhoto(file, fileHeader, jobID)
+		if err != nil {
+			// Clean up any previously uploaded photos
+			for _, photo := range uploadedPhotos {
+				h.r2Service.DeletePhoto(photo.URL)
+			}
+			http.Error(w, fmt.Sprintf("Failed to upload photo: %v", err), http.StatusInternalServerError)
+			return
+		}
+		
+		// Create photo record
+		photo := models.JobPhoto{
+			ID:         uuid.New().String(),
+			JobID:      jobID,
+			URL:        photoURL,
+			Caption:    "",
+			UploadedAt: time.Now(),
+		}
+		
+		// Save to database
+		if err := h.jobRepo.AddPhoto(ctx, jobID, &photo); err != nil {
+			// Clean up uploaded file
+			h.r2Service.DeletePhoto(photoURL)
+			// Clean up any previously uploaded photos
+			for _, p := range uploadedPhotos {
+				h.r2Service.DeletePhoto(p.URL)
+			}
+			http.Error(w, "Failed to save photo", http.StatusInternalServerError)
+			return
+		}
+		
+		uploadedPhotos = append(uploadedPhotos, photo)
+	}
 	
 	w.WriteHeader(http.StatusCreated)
-	respondJSON(w, photo)
+	respondJSON(w, uploadedPhotos)
 }
 
 // RemovePhoto removes a photo from a job
@@ -534,6 +580,35 @@ func (h *JobHandler) RemovePhoto(w http.ResponseWriter, r *http.Request) {
 	jobID := vars["id"]
 	photoID := vars["photoId"]
 	
+	// Get the photo to get its URL
+	job, err := h.jobRepo.GetByID(ctx, jobID)
+	if err != nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+	
+	var photoURL string
+	for _, photo := range job.Photos {
+		if photo.ID == photoID {
+			photoURL = photo.URL
+			break
+		}
+	}
+	
+	if photoURL == "" {
+		http.Error(w, "Photo not found", http.StatusNotFound)
+		return
+	}
+	
+	// Delete from R2 if service is available
+	if h.r2Service == nil {
+		h.r2Service, _ = services.NewR2Service()
+	}
+	if h.r2Service != nil {
+		h.r2Service.DeletePhoto(photoURL)
+	}
+	
+	// Delete from database
 	if err := h.jobRepo.RemovePhoto(ctx, jobID, photoID); err != nil {
 		if err.Error() == "photo not found" {
 			http.Error(w, err.Error(), http.StatusNotFound)

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { jobsStore, jobTemplatesStore, customersStore } from '../lib/stores';
+  import { jobsStore, jobTemplatesStore, customersStore, userStore, effectiveRole, permissions } from '../lib/stores';
   import { router } from '../lib/router';
   import { Plus, Search, Calendar, Clock, CheckCircle, AlertCircle,
            MapPin, DollarSign, Camera, FileText, Trash2, ChevronRight,
@@ -296,13 +296,23 @@
 </script>
 
 <div class="dashboard">
+  <!-- Admin view mode indicator -->
+  {#if $userStore?.role === 'admin' && $userStore.isViewingAsTech}
+    <div class="view-mode-banner">
+      <Users size={16} />
+      <span>Viewing as Tech</span>
+    </div>
+  {/if}
+
   <!-- Header -->
   <div class="dashboard-header">
     <h1>Jobs</h1>
-    <Button on:click={() => showCreateModal = true} variant="primary">
-      <Plus size={20} />
-      New
-    </Button>
+    {#if permissions.canCreateJobs($effectiveRole)}
+      <button class="new-job-btn" on:click={() => showCreateModal = true}>
+        <Plus size={18} />
+        <span>New Job</span>
+      </button>
+    {/if}
   </div>
 
   <!-- Tabs -->
@@ -428,9 +438,11 @@
             </div>
 
             <!-- Amount -->
-            <div class="job-amount-section">
-              <span class="amount">{formatCurrency(job.totalAmount || 0)}</span>
-            </div>
+            {#if permissions.canSeePrices($effectiveRole)}
+              <div class="job-amount-section">
+                <span class="amount">{formatCurrency(job.totalAmount || 0)}</span>
+              </div>
+            {/if}
 
             <!-- Address -->
             <div class="job-address" on:click={(e) => { e.stopPropagation(); openGPS(job.address); }}>
@@ -492,10 +504,12 @@
               <Button fullWidth on:click={() => openJobDetail(job)}>
                 View Job
               </Button>
-              <button class="delete-btn" on:click={(e) => confirmDeleteJob(e, job)}>
-                <Trash2 size={18} />
-                Delete Job
-              </button>
+              {#if permissions.canDeleteJobs($effectiveRole)}
+                <button class="delete-btn" on:click={(e) => confirmDeleteJob(e, job)}>
+                  <Trash2 size={18} />
+                  Delete Job
+                </button>
+              {/if}
             </div>
           </div>
         {/each}
@@ -527,7 +541,9 @@
                 </div>
               </div>
               <div class="list-item-right">
-                <span class="list-amount">{formatCurrency(job.totalAmount || 0)}</span>
+                {#if permissions.canSeePrices($effectiveRole)}
+                  <span class="list-amount">{formatCurrency(job.totalAmount || 0)}</span>
+                {/if}
                 <ChevronRight size={18} />
               </div>
             </div>
@@ -536,6 +552,21 @@
       {/if}
     {/if}
   </div>
+  
+  <!-- Hidden admin toggle (only for admins) -->
+  {#if $userStore?.role === 'admin'}
+    <button 
+      class="admin-toggle"
+      on:click={() => userStore.toggleViewMode()}
+      title={$userStore.isViewingAsTech ? 'Switch to Admin View' : 'Switch to Tech View'}
+    >
+      {#if $userStore.isViewingAsTech}
+        <Shield size={16} />
+      {:else}
+        <Users size={16} />
+      {/if}
+    </button>
+  {/if}
 </div>
 <!-- Date Edit Modal -->
 <Modal bind:isOpen={showDateModal} title="Edit Job Dates" size="sm">
@@ -669,60 +700,103 @@
 
 <style>
   .dashboard {
-    padding: 1.5rem;
-    max-width: 1400px;
+    padding: 2rem 1.5rem;
+    max-width: 1200px;
     margin: 0 auto;
+  }
+
+  /* View mode banner */
+  .view-mode-banner {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.01em;
   }
 
   .dashboard-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    margin-bottom: 3rem;
   }
 
   .dashboard-header h1 {
-    font-size: 1.875rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: #0a0a0a;
     margin: 0;
+    letter-spacing: -0.03em;
   }
 
   /* Category Tabs */
   .category-tabs {
     display: flex;
-    gap: 0.25rem;
-    margin-bottom: 1.5rem;
-    border-bottom: 1px solid var(--gray-200);
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+    border-bottom: 1px solid #e5e5e5;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .category-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .category-tab {
-    padding: 0.75rem 1.25rem;
+    padding: 0 0 1rem 0;
     border: none;
     background: none;
     font-size: 0.9375rem;
     font-weight: 500;
-    color: var(--text-secondary);
+    color: #737373;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: color 0.2s ease;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
+    letter-spacing: -0.01em;
+    position: relative;
   }
 
   .category-tab:hover {
-    color: var(--text-primary);
+    color: #404040;
   }
 
   .category-tab.active {
-    color: var(--primary-500);
-    border-bottom-color: var(--primary-500);
+    color: #0a0a0a;
+    font-weight: 600;
+  }
+
+  .category-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #0a0a0a;
+    animation: tabSlide 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes tabSlide {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
   }
 
   /* Search Section */
   .search-section {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
     display: flex;
     gap: 0.75rem;
     align-items: center;
@@ -733,64 +807,68 @@
     flex: 1;
   }
 
-  /* View Toggle */
-  .view-toggle {
-    display: flex;
-    background: var(--gray-100);
-    padding: 0.125rem;
-    border-radius: var(--radius-md);
-  }
-
-  .view-btn {
-    padding: 0.375rem 0.5rem;
-    border: none;
-    background: transparent;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-base);
-  }
-
-  .view-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .view-btn.active {
-    background: white;
-    color: var(--text-primary);
-    box-shadow: var(--shadow-sm);
-  }
-
   :global(.search-icon) {
     position: absolute;
-    left: 0.875rem;
+    left: 1rem;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-tertiary);
+    color: #a3a3a3;
     pointer-events: none;
   }
 
   .search-input {
     width: 100%;
-    padding: 0.625rem 0.875rem 0.625rem 2.75rem;
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-md);
+    padding: 0.875rem 1rem 0.875rem 2.875rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 10px;
     font-size: 0.9375rem;
-    background: var(--gray-50);
-    transition: all var(--transition-base);
+    font-weight: 400;
+    background: #fafafa;
+    transition: all 0.2s ease;
+    letter-spacing: -0.01em;
   }
 
   .search-input::placeholder {
-    color: var(--text-tertiary);
+    color: #a3a3a3;
+    font-weight: 400;
   }
 
   .search-input:focus {
-    border-color: var(--gray-300);
+    border-color: #d4d4d4;
     background: white;
     outline: none;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.02);
+  }
+
+  /* View Toggle */
+  .view-toggle {
+    display: flex;
+    background: #f5f5f5;
+    padding: 0.125rem;
+    border-radius: 8px;
+  }
+
+  .view-btn {
+    padding: 0.5rem 0.625rem;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #737373;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .view-btn:hover {
+    color: #404040;
+  }
+
+  .view-btn.active {
+    background: white;
+    color: #0a0a0a;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   /* Jobs Container */
@@ -801,31 +879,59 @@
   .jobs-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 1.5rem;
+    gap: 1.25rem;
+  }
+
+  /* New Job Button */
+  .new-job-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    background: #0a0a0a;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .new-job-btn:hover {
+    background: #171717;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .new-job-btn span {
+    line-height: 1;
   }
 
   /* List View */
   .jobs-list {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .job-list-item {
     background: white;
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    padding: 1rem 1.25rem;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: all 0.2s ease;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
 
   .job-list-item:hover {
-    border-color: var(--gray-300);
-    box-shadow: var(--shadow-sm);
+    border-color: #d4d4d4;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transform: translateY(-1px);
   }
 
   .list-item-left {
@@ -836,72 +942,85 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.625rem;
   }
 
   .list-item-header h4 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.0625rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #0a0a0a;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
   }
 
   .list-status {
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.625rem;
-    font-weight: 600;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.6875rem;
+    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
   }
 
   .list-status.badge-scheduled {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning-500);
+    background: #fef3c7;
+    color: #92400e;
   }
 
   .list-status.badge-progress {
-    background: rgba(91, 91, 214, 0.1);
-    color: var(--primary-500);
+    background: #e0e7ff;
+    color: #3730a3;
   }
 
   .list-status.badge-completed {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--success-500);
+    background: #d1fae5;
+    color: #065f46;
   }
 
   .list-item-details {
     display: flex;
-    gap: 1.5rem;
+    gap: 1.75rem;
     align-items: center;
   }
 
   .list-meta {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    color: var(--text-secondary);
+    gap: 0.5rem;
+    color: #737373;
     font-size: 0.875rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
   }
 
   .list-meta :global(svg) {
-    color: var(--text-tertiary);
+    color: #a3a3a3;
+    flex-shrink: 0;
   }
 
   .list-item-right {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 1.25rem;
   }
 
   .list-amount {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0a0a0a;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
   }
 
   .list-item-right :global(svg) {
-    color: var(--text-tertiary);
+    color: #d4d4d4;
+    transition: color 0.2s ease;
+  }
+
+  .job-list-item:hover .list-item-right :global(svg) {
+    color: #737373;
   }
 
   /* List View */
@@ -993,16 +1112,18 @@
 
   .job-card {
     background: white;
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    padding: 1.25rem;
-    transition: all var(--transition-base);
+    border: 1px solid #e5e5e5;
+    border-radius: 14px;
+    padding: 1.5rem;
+    transition: all 0.2s ease;
     cursor: pointer;
+    position: relative;
   }
 
   .job-card:hover {
-    border-color: var(--gray-300);
-    box-shadow: var(--shadow-sm);
+    border-color: #d4d4d4;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    transform: translateY(-2px);
   }
 
   /* Status Badge */
@@ -1484,23 +1605,48 @@
     }
   }
 
+  /* Mobile Responsive */
   @media (max-width: 768px) {
     .dashboard {
-      padding: 1rem;
+      padding: 1.25rem 1rem;
+    }
+
+    .dashboard-header {
+      margin-bottom: 2rem;
     }
 
     .dashboard-header h1 {
-      font-size: 1.5rem;
+      font-size: 1.875rem;
+    }
+
+    .new-job-btn {
+      padding: 0.625rem 1rem;
+      font-size: 0.875rem;
+    }
+
+    .new-job-btn :global(svg) {
+      width: 16px;
+      height: 16px;
+    }
+
+    .category-tabs {
+      gap: 1.5rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .category-tab {
+      font-size: 0.875rem;
     }
 
     .search-section {
       flex-direction: column;
       gap: 0.75rem;
       align-items: stretch;
+      margin-bottom: 1.5rem;
     }
 
-    .search-wrapper {
-      max-width: 100%;
+    .search-input {
+      font-size: 16px; /* Prevents zoom on iOS */
     }
 
     .view-toggle {
@@ -1509,27 +1655,40 @@
 
     .jobs-grid {
       grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .job-card {
+      padding: 1.25rem;
     }
 
     .job-list-item {
-      padding: 0.875rem 1rem;
+      padding: 1rem;
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
+    }
+
+    .list-item-header h4 {
+      font-size: 1rem;
     }
 
     .list-item-right {
       flex-direction: row-reverse;
       justify-content: space-between;
       width: 100%;
-      padding-top: 0.75rem;
-      border-top: 1px solid var(--gray-100);
+      padding-top: 0.875rem;
+      border-top: 1px solid #f5f5f5;
+    }
+
+    .list-amount {
+      font-size: 1.125rem;
     }
 
     .list-item-details {
       flex-direction: column;
       align-items: flex-start;
-      gap: 0.5rem;
+      gap: 0.625rem;
     }
 
     .list-meta {
@@ -1549,5 +1708,31 @@
     .amount {
       font-size: 1.5rem;
     }
+  }
+
+  /* Admin Toggle - Hidden but accessible */
+  .admin-toggle {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: #f5f5f5;
+    border: 1px solid #e5e5e5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.3;
+    transition: all 0.2s ease;
+    color: #737373;
+  }
+
+  .admin-toggle:hover {
+    opacity: 1;
+    background: #0a0a0a;
+    color: white;
+    border-color: #0a0a0a;
   }
 </style>

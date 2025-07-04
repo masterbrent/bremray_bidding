@@ -7,7 +7,7 @@
   export let isOpen: boolean = false;
   
   const dispatch = createEventDispatcher<{
-    photosAdded: { files: File[] };
+    capture: { files: File[] };
   }>();
   
   let capturedPhotos: { file: File; url: string }[] = [];
@@ -85,7 +85,7 @@
   
   function savePhotos() {
     const files = capturedPhotos.map(p => p.file);
-    dispatch('photosAdded', { files });
+    dispatch('capture', { files });
     closeModal();
   }
   
