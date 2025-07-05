@@ -123,23 +123,22 @@
     </nav>
     
     <div class="sidebar-footer">
-      <StatusIndicators />
-      
-      {#if $userStore?.role === 'admin'}
-        <button 
-          class="admin-toggle"
-          on:click={() => userStore.toggleViewMode()}
-          title={$userStore.isViewingAsTech ? 'Switch to Admin View' : 'Switch to Tech View'}
-        >
-          {#if $userStore.isViewingAsTech}
-            <Shield size={16} />
-            <span>Switch to Admin View</span>
-          {:else}
-            <Users size={16} />
-            <span>Switch to Tech View</span>
-          {/if}
-        </button>
-      {/if}
+      <div class="status-row">
+        <StatusIndicators />
+        {#if $userStore?.role === 'admin'}
+          <button 
+            class="admin-toggle-icon"
+            on:click={() => userStore.toggleViewMode()}
+            title={$userStore.isViewingAsTech ? 'Switch to Admin View' : 'Switch to Tech View'}
+          >
+            {#if $userStore.isViewingAsTech}
+              <Shield size={16} />
+            {:else}
+              <Users size={16} />
+            {/if}
+          </button>
+        {/if}
+      </div>
       
       <div class="user-section">
         <div class="user-avatar">B</div>
@@ -432,30 +431,33 @@
     gap: 1rem;
   }
   
-  /* Admin Toggle */
-  .admin-toggle {
-    width: 100%;
+  /* Status Row */
+  .status-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    background: var(--gray-50);
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-md);
-    font-size: 0.875rem;
-    font-weight: 500;
+    gap: 0.75rem;
+  }
+  
+  /* Admin Toggle Icon */
+  .admin-toggle-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f4f6;
+    border: none;
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s ease;
   }
   
-  .admin-toggle:hover {
-    background: white;
-    border-color: var(--gray-300);
-    color: var(--text-primary);
+  .admin-toggle-icon:hover {
+    background: #e5e7eb;
   }
   
-  .admin-toggle :global(svg) {
+  .admin-toggle-icon :global(svg) {
     width: 16px;
     height: 16px;
   }
