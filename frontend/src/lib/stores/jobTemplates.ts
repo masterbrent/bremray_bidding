@@ -84,9 +84,11 @@ function createJobTemplatesStore() {
     },
 
     // Update template
-    async update(id: string, updates: { name?: string; description?: string; isActive?: boolean }) {
+    async update(id: string, updates: { name?: string; description?: string; isActive?: boolean; phases?: { name: string; order: number; description?: string }[] }) {
       try {
+        console.log('Updating template:', id, updates);
         const template = await api.put<JobTemplate>(`/templates/${id}`, updates);
+        console.log('Updated template response:', template);
         update(state => ({
           ...state,
           templates: state.templates.map(t => t.id === id ? template : t)

@@ -6,7 +6,7 @@
            MapPin, DollarSign, Camera, FileText, Trash2, ChevronRight,
            Users, Package, Shield, ShieldOff, Activity, Send,
            Edit3, ExternalLink, LayoutGrid, List } from 'lucide-svelte';
-  import type { Customer, Job } from '../lib/types/models';
+  import type { Customer, Job, TemplatePhase } from '../lib/types/models';
   import { WaveService } from '../lib/services/waveService';
   
   // Component imports
@@ -143,6 +143,23 @@
       case 'in_progress': return 'In Progress';
       case 'completed': return 'Completed';
       default: return status;
+    }
+  }
+  
+  function getCurrentPhase(job: Job): TemplatePhase | null {
+    if (!job.currentPhaseId || !job.template?.phases) return null;
+    return job.template.phases.find(p => p.id === job.currentPhaseId) || null;
+  }
+  
+  async function updateJobPhase(event: Event, job: Job, phaseId: string) {
+    event.stopPropagation();
+    
+    try {
+      await jobsStore.update(job.id, {
+        currentPhaseId: phaseId || null
+      });
+    } catch (error) {
+      console.error('Failed to update job phase:', error);
     }
   }
   
@@ -454,16 +471,29 @@
         <div class="jobs-grid">
           {#each filteredJobs as job}
           <div class="job-card">
-            <!-- Status Badge -->
-            <div class="job-status-badge {getStatusBadgeClass(job.status)}">
-              {getStatusLabel(job.status)}
-            </div>
+            <!-- Phase Dropdown instead of Status Badge -->
+            {#if job.template?.phases && job.template.phases.length > 0}
+              <select 
+                class="phase-dropdown-top"
+                value={job.currentPhaseId || ''}
+                on:change={(e) => updateJobPhase(e, job, e.target.value)}
+                on:click|stopPropagation
+              >
+                <option value="">Select Phase</option>
+                {#each job.template.phases.sort((a, b) => a.order - b.order) as phase}
+                  <option value={phase.id}>{phase.name}</option>
+                {/each}
+              </select>
+            {:else}
+              <div class="no-phase-badge">No Phases</div>
+            {/if}
 
             <!-- Customer & Template -->
             <div class="job-header">
               <h3>{job.customer?.name || 'Unknown Customer'} - {job.address.split(',')[1]?.trim() || 'Location'}</h3>
               <div class="job-template-row">
                 <span class="template-badge">{job.template?.name || 'Custom Job'}</span>
+                
                 <button 
                   class="permit-toggle"
                   class:permit-required={job.permitRequired}
@@ -520,7 +550,7 @@
             </div>
 
             <!-- Wave Invoice -->
-            {#if job.waveInvoiceId}
+            {#if permissions.canSeePrices($effectiveRole) && job.waveInvoiceId}
               <div class="wave-invoice">
                 <span>Wave Invoice</span>
                 <a href={job.waveInvoiceUrl} target="_blank" on:click|stopPropagation class="wave-link">
@@ -532,28 +562,32 @@
 
             <!-- Actions -->
             <div class="job-actions">
-              {#if !job.waveInvoiceId && !sendingToWave[job.id]}
-                <button 
-                  class="action-btn" 
-                  on:click={(e) => sendToWave(e, job)}
-                  title="Send to Wave"
-                >
-                  <Send size={18} />
-                  <span>Send to Wave</span>
-                </button>
-              {:else if sendingToWave[job.id]}
-                <button class="action-btn" disabled>
-                  <span>Sending...</span>
-                </button>
+              {#if permissions.canSeePrices($effectiveRole)}
+                {#if !job.waveInvoiceId && !sendingToWave[job.id]}
+                  <button 
+                    class="action-btn" 
+                    on:click={(e) => sendToWave(e, job)}
+                    title="Send to Wave"
+                  >
+                    <Send size={18} />
+                    <span>Send to Wave</span>
+                  </button>
+                {:else if sendingToWave[job.id]}
+                  <button class="action-btn" disabled>
+                    <span>Sending...</span>
+                  </button>
+                {/if}
               {/if}
               <button class="action-btn" on:click={(e) => openPhotoGallery(e, job)}>
                 <Camera size={18} />
                 <span>Gallery {#if job.photos?.length > 0}({job.photos.length}){/if}</span>
               </button>
-              <button class="action-btn" on:click={(e) => openInvoice(e, job)}>
-                <FileText size={18} />
-                <span>Invoice</span>
-              </button>
+              {#if permissions.canSeePrices($effectiveRole)}
+                <button class="action-btn" on:click={(e) => openInvoice(e, job)}>
+                  <FileText size={18} />
+                  <span>Invoice</span>
+                </button>
+              {/if}
             </div>
             
             {#if waveError[job.id]}
@@ -584,7 +618,21 @@
               <div class="list-item-left">
                 <div class="list-item-header">
                   <h4>{job.customer?.name || 'Unknown Customer'}</h4>
-                  <span class="list-status {getStatusBadgeClass(job.status)}">{getStatusLabel(job.status)}</span>
+                  {#if job.template?.phases && job.template.phases.length > 0}
+                    <select 
+                      class="list-phase-dropdown"
+                      value={job.currentPhaseId || ''}
+                      on:change={(e) => updateJobPhase(e, job, e.target.value)}
+                      on:click|stopPropagation
+                    >
+                      <option value="">Select Phase</option>
+                      {#each job.template.phases.sort((a, b) => a.order - b.order) as phase}
+                        <option value={phase.id}>{phase.name}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <span class="list-no-phase">No Phases</span>
+                  {/if}
                 </div>
                 <div class="list-item-details">
                   <div class="list-meta">
@@ -1021,29 +1069,42 @@
     line-height: 1.3;
   }
 
-  .list-status {
-    padding: 0.1875rem 0.5rem;
+  .list-phase-dropdown {
+    padding: 0.25rem 0.5rem;
+    padding-right: 1.75rem;
     border-radius: 6px;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    line-height: 1.4;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3e%3cpath fill='%23475569' d='M6 9L1 4h10z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    min-width: 100px;
   }
 
-  .list-status.badge-scheduled {
-    background: #fef3c7;
-    color: #92400e;
+  .list-phase-dropdown:hover {
+    background-color: #e2e8f0;
+    border-color: #cbd5e1;
   }
 
-  .list-status.badge-progress {
-    background: #e0e7ff;
-    color: #3730a3;
+  .list-phase-dropdown:focus {
+    outline: none;
+    border-color: #5b5bd6;
+    box-shadow: 0 0 0 2px rgba(91, 91, 214, 0.1);
   }
 
-  .list-status.badge-completed {
-    background: #d1fae5;
-    color: #065f46;
+  .list-no-phase {
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: #64748b;
   }
 
   .list-item-details {
@@ -1193,32 +1254,49 @@
     transform: translateY(-2px);
   }
 
-  /* Status Badge */
-  .job-status-badge {
+  /* Phase Dropdown at Top */
+  .phase-dropdown-top {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    padding: 0.375rem 0.75rem;
+    padding: 0.5rem 0.75rem;
+    padding-right: 2rem;
     border-radius: var(--radius-md);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3e%3cpath fill='%23475569' d='M6 9L1 4h10z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    min-width: 120px;
   }
 
-  .badge-scheduled {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning-500);
+  .phase-dropdown-top:hover {
+    background-color: #e2e8f0;
+    border-color: #cbd5e1;
   }
 
-  .badge-progress {
-    background: rgba(91, 91, 214, 0.1);
-    color: var(--primary-500);
+  .phase-dropdown-top:focus {
+    outline: none;
+    border-color: #5b5bd6;
+    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
   }
 
-  .badge-completed {
-    background: rgba(16, 185, 129, 0.1);
-    color: var(--success-500);
+  .no-phase-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: #64748b;
   }
 
   /* Job Header */
@@ -1238,6 +1316,28 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+  
+  .phase-dropdown {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .phase-dropdown:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+  }
+  
+  .phase-dropdown:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
   }
 
   .template-badge {

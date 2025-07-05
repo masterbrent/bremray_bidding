@@ -76,6 +76,7 @@ export interface Job {
   templateId: string;
   address: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  currentPhaseId?: string;
   scheduledDate: Date;
   startDate?: Date;
   endDate?: Date;
@@ -92,6 +93,7 @@ export interface Job {
   // Frontend only - these will be loaded separately
   customer?: Customer;
   template?: JobTemplate;
+  currentPhase?: TemplatePhase;
 }
 
 export interface Address {

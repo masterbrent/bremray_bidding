@@ -24,6 +24,7 @@ type Job struct {
 	TemplateID     string      `json:"templateId" db:"template_id"`
 	Address        string      `json:"address" db:"address"`
 	Status         JobStatus   `json:"status" db:"status"`
+	CurrentPhaseID *string     `json:"currentPhaseId,omitempty" db:"current_phase_id"`
 	ScheduledDate  time.Time   `json:"scheduledDate" db:"scheduled_date"`
 	StartDate      *time.Time  `json:"startDate,omitempty" db:"start_date"`
 	EndDate        *time.Time  `json:"endDate,omitempty" db:"end_date"`
@@ -142,5 +143,15 @@ func (j *Job) CalculateTotal() {
 		total += item.Total
 	}
 	j.TotalAmount = total
+	j.UpdatedAt = time.Now()
+}
+
+// UpdatePhase updates the current phase of the job
+func (j *Job) UpdatePhase(phaseID string) {
+	if phaseID == "" {
+		j.CurrentPhaseID = nil
+	} else {
+		j.CurrentPhaseID = &phaseID
+	}
 	j.UpdatedAt = time.Now()
 }

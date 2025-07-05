@@ -10,6 +10,7 @@
   import ItemsPage from './pages/ItemsPage.svelte';
   import JobTemplatesPage from './pages/JobTemplatesPage.svelte';
   import SettingsPage from './pages/SettingsPage.svelte';
+  import UserPreferencesPage from './pages/UserPreferencesPage.svelte';
   import JobDetailPage from './pages/JobDetailPage.svelte';
   import StatsPage from './pages/StatsPage.svelte';
   import UsersPage from './pages/UsersPage.svelte';
@@ -21,13 +22,17 @@
   
   $: navItems = [
     { route: 'jobs', label: 'Jobs', icon: Briefcase },
-    { route: 'stats', label: 'Stats', icon: BarChart3 },
+    ...(permissions.canSeePrices($effectiveRole) ? [
+      { route: 'stats', label: 'Stats', icon: BarChart3 },
+    ] : []),
     ...(permissions.canEditJobs($effectiveRole) ? [
       { route: 'items', label: 'Items', icon: Package },
       { route: 'templates', label: 'Templates', icon: FileText },
       { route: 'users', label: 'Users', icon: Users },
-    ] : []),
-    { route: 'settings', label: 'Settings', icon: Settings },
+      { route: 'settings', label: 'Settings', icon: Settings },
+    ] : [
+      { route: 'settings', label: 'Preferences', icon: Settings },
+    ]),
   ];
   
   // Subscribe to router
@@ -127,15 +132,47 @@
         {#if currentRoute === 'jobs'}
           <JobsPage />
         {:else if currentRoute === 'stats'}
-          <StatsPage />
+          {#if permissions.canSeePrices($effectiveRole)}
+            <StatsPage />
+          {:else}
+            <div class="access-denied">
+              <h2>Access Denied</h2>
+              <p>You don't have permission to view this page.</p>
+            </div>
+          {/if}
         {:else if currentRoute === 'items'}
-          <ItemsPage />
+          {#if permissions.canEditJobs($effectiveRole)}
+            <ItemsPage />
+          {:else}
+            <div class="access-denied">
+              <h2>Access Denied</h2>
+              <p>You don't have permission to view this page.</p>
+            </div>
+          {/if}
         {:else if currentRoute === 'templates'}
-          <JobTemplatesPage />
+          {#if permissions.canEditJobs($effectiveRole)}
+            <JobTemplatesPage />
+          {:else}
+            <div class="access-denied">
+              <h2>Access Denied</h2>
+              <p>You don't have permission to view this page.</p>
+            </div>
+          {/if}
         {:else if currentRoute === 'users'}
-          <UsersPage />
+          {#if permissions.canEditJobs($effectiveRole)}
+            <UsersPage />
+          {:else}
+            <div class="access-denied">
+              <h2>Access Denied</h2>
+              <p>You don't have permission to view this page.</p>
+            </div>
+          {/if}
         {:else if currentRoute === 'settings'}
-          <SettingsPage />
+          {#if permissions.canEditJobs($effectiveRole)}
+            <SettingsPage />
+          {:else}
+            <UserPreferencesPage />
+          {/if}
         {:else if currentRoute === 'job-detail'}
           <JobDetailPage jobId={routeParams.id} />
         {:else}
@@ -359,6 +396,29 @@
   
   .overlay {
     display: none;
+  }
+  
+  /* Access Denied styles */
+  .access-denied {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .access-denied h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+  
+  .access-denied p {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
   }
   
   /* Error styles */

@@ -43,15 +43,15 @@ func (r *jobRepository) Create(ctx context.Context, job *models.Job) error {
 	query := `
 		INSERT INTO jobs (
 			id, customer_id, template_id, address, status,
-			scheduled_date, start_date, end_date, permit_required,
+			current_phase_id, scheduled_date, start_date, end_date, permit_required,
 			permit_number, total_amount, notes, wave_invoice_id,
 			wave_invoice_url, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 	
 	_, err := r.db.ExecContext(ctx, query,
 		job.ID, job.CustomerID, job.TemplateID, job.Address, job.Status,
-		job.ScheduledDate, job.StartDate, job.EndDate, job.PermitRequired,
+		job.CurrentPhaseID, job.ScheduledDate, job.StartDate, job.EndDate, job.PermitRequired,
 		job.PermitNumber, job.TotalAmount, job.Notes, job.WaveInvoiceID,
 		job.WaveInvoiceURL, job.CreatedAt, job.UpdatedAt,
 	)
@@ -63,7 +63,7 @@ func (r *jobRepository) GetByID(ctx context.Context, id string) (*models.Job, er
 	query := `
 		SELECT 
 			id, customer_id, template_id, address, status,
-			scheduled_date, start_date, end_date, permit_required,
+			current_phase_id, scheduled_date, start_date, end_date, permit_required,
 			permit_number, total_amount, notes, wave_invoice_id,
 			wave_invoice_url, created_at, updated_at
 		FROM jobs
@@ -73,7 +73,7 @@ func (r *jobRepository) GetByID(ctx context.Context, id string) (*models.Job, er
 	job := &models.Job{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&job.ID, &job.CustomerID, &job.TemplateID, &job.Address, &job.Status,
-		&job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
+		&job.CurrentPhaseID, &job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
 		&job.PermitNumber, &job.TotalAmount, &job.Notes, &job.WaveInvoiceID,
 		&job.WaveInvoiceURL, &job.CreatedAt, &job.UpdatedAt,
 	)
@@ -103,15 +103,15 @@ func (r *jobRepository) Update(ctx context.Context, job *models.Job) error {
 	query := `
 		UPDATE jobs SET
 			customer_id = $2, template_id = $3, address = $4, status = $5,
-			scheduled_date = $6, start_date = $7, end_date = $8, permit_required = $9,
-			permit_number = $10, total_amount = $11, notes = $12, wave_invoice_id = $13,
-			wave_invoice_url = $14, updated_at = $15
+			current_phase_id = $6, scheduled_date = $7, start_date = $8, end_date = $9, permit_required = $10,
+			permit_number = $11, total_amount = $12, notes = $13, wave_invoice_id = $14,
+			wave_invoice_url = $15, updated_at = $16
 		WHERE id = $1
 	`
 	
 	result, err := r.db.ExecContext(ctx, query,
 		job.ID, job.CustomerID, job.TemplateID, job.Address, job.Status,
-		job.ScheduledDate, job.StartDate, job.EndDate, job.PermitRequired,
+		job.CurrentPhaseID, job.ScheduledDate, job.StartDate, job.EndDate, job.PermitRequired,
 		job.PermitNumber, job.TotalAmount, job.Notes, job.WaveInvoiceID,
 		job.WaveInvoiceURL, job.UpdatedAt,
 	)
@@ -156,7 +156,7 @@ func (r *jobRepository) List(ctx context.Context, limit, offset int) ([]*models.
 	query := `
 		SELECT 
 			id, customer_id, template_id, address, status,
-			scheduled_date, start_date, end_date, permit_required,
+			current_phase_id, scheduled_date, start_date, end_date, permit_required,
 			permit_number, total_amount, notes, wave_invoice_id,
 			wave_invoice_url, created_at, updated_at
 		FROM jobs
@@ -175,7 +175,7 @@ func (r *jobRepository) List(ctx context.Context, limit, offset int) ([]*models.
 		job := &models.Job{}
 		err := rows.Scan(
 			&job.ID, &job.CustomerID, &job.TemplateID, &job.Address, &job.Status,
-			&job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
+			&job.CurrentPhaseID, &job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
 			&job.PermitNumber, &job.TotalAmount, &job.Notes, &job.WaveInvoiceID,
 			&job.WaveInvoiceURL, &job.CreatedAt, &job.UpdatedAt,
 		)
@@ -204,7 +204,7 @@ func (r *jobRepository) GetByCustomerID(ctx context.Context, customerID string) 
 	query := `
 		SELECT 
 			id, customer_id, template_id, address, status,
-			scheduled_date, start_date, end_date, permit_required,
+			current_phase_id, scheduled_date, start_date, end_date, permit_required,
 			permit_number, total_amount, notes, wave_invoice_id,
 			wave_invoice_url, created_at, updated_at
 		FROM jobs
@@ -225,7 +225,7 @@ func (r *jobRepository) GetByStatus(ctx context.Context, status models.JobStatus
 	query := `
 		SELECT 
 			id, customer_id, template_id, address, status,
-			scheduled_date, start_date, end_date, permit_required,
+			current_phase_id, scheduled_date, start_date, end_date, permit_required,
 			permit_number, total_amount, notes, wave_invoice_id,
 			wave_invoice_url, created_at, updated_at
 		FROM jobs
@@ -406,7 +406,7 @@ func (r *jobRepository) scanJobs(ctx context.Context, rows *sql.Rows) ([]*models
 		job := &models.Job{}
 		err := rows.Scan(
 			&job.ID, &job.CustomerID, &job.TemplateID, &job.Address, &job.Status,
-			&job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
+			&job.CurrentPhaseID, &job.ScheduledDate, &job.StartDate, &job.EndDate, &job.PermitRequired,
 			&job.PermitNumber, &job.TotalAmount, &job.Notes, &job.WaveInvoiceID,
 			&job.WaveInvoiceURL, &job.CreatedAt, &job.UpdatedAt,
 		)

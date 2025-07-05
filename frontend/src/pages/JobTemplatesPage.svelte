@@ -15,6 +15,9 @@
     template: null as JobTemplate | null
   };
   let formError = '';
+  let newPhaseForTemplate = ''; // For adding phases to existing templates
+  let draggedPhaseIndex: number | null = null;
+  let templateDraggedPhaseIndex: number | null = null; // For dragging phases in existing templates
   
   let formData = {
     name: '',
@@ -23,7 +26,103 @@
     phases: [] as { name: string; order: number; description?: string }[]
   };
   
-  let newPhaseName = '';
+  function handleDragStart(e: DragEvent, index: number) {
+    draggedPhaseIndex = index;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  }
+  
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }
+  
+  function handleDrop(e: DragEvent, dropIndex: number) {
+    e.preventDefault();
+    if (draggedPhaseIndex === null || draggedPhaseIndex === dropIndex) return;
+    
+    const phases = [...formData.phases];
+    const [draggedPhase] = phases.splice(draggedPhaseIndex, 1);
+    phases.splice(dropIndex, 0, draggedPhase);
+    
+    // Update order numbers
+    phases.forEach((phase, i) => {
+      phase.order = i + 1;
+    });
+    
+    formData.phases = phases;
+    draggedPhaseIndex = null;
+  }
+  
+  // Drag handlers for template detail view
+  function handleTemplateDragStart(e: DragEvent, index: number) {
+    templateDraggedPhaseIndex = index;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+    }
+  }
+  
+  function handleTemplateDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }
+  
+  async function handleTemplateDrop(e: DragEvent, dropIndex: number) {
+    e.preventDefault();
+    if (!selectedTemplate || templateDraggedPhaseIndex === null || templateDraggedPhaseIndex === dropIndex) return;
+    
+    const phases = [...(selectedTemplate.phases || [])];
+    const [draggedPhase] = phases.splice(templateDraggedPhaseIndex, 1);
+    phases.splice(dropIndex, 0, draggedPhase);
+    
+    // Update order numbers
+    phases.forEach((phase, i) => {
+      phase.order = i + 1;
+    });
+    
+    // Update the template
+    try {
+      await jobTemplatesStore.update(selectedTemplate.id, {
+        name: selectedTemplate.name,
+        description: selectedTemplate.description,
+        isActive: selectedTemplate.isActive,
+        phases
+      });
+    } catch (error) {
+      console.error('Failed to reorder phases:', error);
+    }
+    
+    templateDraggedPhaseIndex = null;
+  }
+  
+  async function deletePhaseFromTemplate(phaseIndex: number) {
+    if (!selectedTemplate) return;
+    
+    // Remove the phase at the given index
+    const phases = selectedTemplate.phases.filter((_, index) => index !== phaseIndex);
+    
+    // Reorder remaining phases
+    phases.forEach((phase, i) => {
+      phase.order = i + 1;
+    });
+    
+    // Update the template
+    try {
+      await jobTemplatesStore.update(selectedTemplate.id, {
+        name: selectedTemplate.name,
+        description: selectedTemplate.description,
+        isActive: selectedTemplate.isActive,
+        phases
+      });
+    } catch (error) {
+      console.error('Failed to delete phase:', error);
+    }
+  }
   
   onMount(() => {
     jobTemplatesStore.load();
@@ -70,7 +169,7 @@
   
   function addItemToTemplate(item: Item) {
     if (!formData.items.some(i => i.itemId === item.id)) {
-      formData.items = [...formData.items, { itemId: item.id, defaultQuantity: 1 }];
+      formData.items = [...formData.items, { itemId: item.id, defaultQuantity: 0 }];
     }
   }
   
@@ -79,15 +178,12 @@
   }
   
   function addPhase() {
-    if (!newPhaseName.trim()) return;
-    
     const maxOrder = Math.max(0, ...formData.phases.map(p => p.order));
     formData.phases = [...formData.phases, {
-      name: newPhaseName.trim(),
+      name: '',
       order: maxOrder + 1,
       description: ''
     }];
-    newPhaseName = '';
   }
   
   function removePhase(index: number) {
@@ -146,10 +242,41 @@
       if (hasItem) {
         await jobTemplatesStore.removeItemFromTemplate(templateId, itemId);
       } else {
-        await jobTemplatesStore.addItemToTemplate(templateId, itemId, 1);
+        await jobTemplatesStore.addItemToTemplate(templateId, itemId, 0); // Always 0 quantity
       }
     } catch (error) {
       console.error('Failed to update template:', error);
+    }
+  }
+  
+  async function addPhaseToTemplate() {
+    if (!selectedTemplate || !newPhaseForTemplate.trim()) return;
+    
+    console.log('Adding phase to template:', selectedTemplate.id);
+    console.log('Current phases:', selectedTemplate.phases);
+    
+    const maxOrder = Math.max(0, ...(selectedTemplate.phases?.map(p => p.order) || []));
+    const phases = [...(selectedTemplate.phases || []), {
+      name: newPhaseForTemplate.trim(),
+      order: maxOrder + 1,
+      description: ''
+    }];
+    
+    console.log('New phases array:', phases);
+    
+    // Update template with new phases
+    try {
+      // Send full update including existing data
+      await jobTemplatesStore.update(selectedTemplate.id, {
+        name: selectedTemplate.name,
+        description: selectedTemplate.description,
+        isActive: selectedTemplate.isActive,
+        phases
+      });
+      newPhaseForTemplate = '';
+      console.log('Phase added successfully');
+    } catch (error) {
+      console.error('Failed to add phase:', error);
     }
   }
   
@@ -260,12 +387,67 @@
             <div class="section">
               <h3>Phases</h3>
               <div class="phases-list">
-                {#each selectedTemplate.phases as phase}
-                  <div class="phase-item">
+                {#each selectedTemplate.phases.sort((a, b) => a.order - b.order) as phase, index}
+                  <div 
+                    class="phase-item"
+                    draggable="true"
+                    on:dragstart={(e) => handleTemplateDragStart(e, index)}
+                    on:dragover={handleTemplateDragOver}
+                    on:drop={(e) => handleTemplateDrop(e, index)}
+                  >
+                    <div class="drag-handle">⋮⋮</div>
                     <span class="phase-order">{phase.order}</span>
                     <span class="phase-name">{phase.name}</span>
+                    <button 
+                      class="delete-phase-btn"
+                      on:click={() => deletePhaseFromTemplate(index)}
+                      title="Delete phase"
+                    >
+                      ×
+                    </button>
                   </div>
                 {/each}
+              </div>
+              
+              <div class="add-phase-section">
+                <input
+                  type="text"
+                  bind:value={newPhaseForTemplate}
+                  placeholder="Add a new phase..."
+                  class="phase-add-input"
+                  on:keydown={(e) => e.key === 'Enter' && addPhaseToTemplate()}
+                />
+                <Button 
+                  size="small" 
+                  variant="secondary" 
+                  on:click={addPhaseToTemplate}
+                  disabled={!newPhaseForTemplate.trim()}
+                >
+                  Add Phase
+                </Button>
+              </div>
+            </div>
+          {:else}
+            <div class="section">
+              <h3>Phases</h3>
+              <p class="empty-message">No phases defined</p>
+              
+              <div class="add-phase-section">
+                <input
+                  type="text"
+                  bind:value={newPhaseForTemplate}
+                  placeholder="Add the first phase..."
+                  class="phase-add-input"
+                  on:keydown={(e) => e.key === 'Enter' && addPhaseToTemplate()}
+                />
+                <Button 
+                  size="small" 
+                  variant="secondary" 
+                  on:click={addPhaseToTemplate}
+                  disabled={!newPhaseForTemplate.trim()}
+                >
+                  Add Phase
+                </Button>
               </div>
             </div>
           {/if}
@@ -306,6 +488,33 @@
     </div>
     
     <div class="form-section">
+      <h3>Job Phases</h3>
+      <div class="phases-container">
+        {#each formData.phases as phase, index}
+          <div 
+            class="phase-input-row" 
+            draggable="true"
+            on:dragstart={(e) => handleDragStart(e, index)}
+            on:dragover={handleDragOver}
+            on:drop={(e) => handleDrop(e, index)}
+          >
+            <div class="drag-handle">⋮⋮</div>
+            <input
+              type="text"
+              bind:value={phase.name}
+              placeholder="Phase name"
+              class="phase-name-input"
+            />
+            <button type="button" on:click={() => removePhase(index)} class="remove-phase">×</button>
+          </div>
+        {/each}
+        <button type="button" class="add-phase-btn" on:click={addPhase}>
+          + Add Phase
+        </button>
+      </div>
+    </div>
+    
+    <div class="form-section">
       <h3>Items *</h3>
       <div class="items-picker">
         <div class="picker-column">
@@ -332,14 +541,6 @@
                 <div class="selected-item">
                   <span class="remove-icon" on:click={() => removeItemFromTemplate(item.id)}>←</span>
                   <span class="item-name">{item.name}</span>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    bind:value={templateItem.defaultQuantity}
-                    class="qty-input"
-                    on:click|stopPropagation
-                  />
                 </div>
               {/if}
             {/each}
@@ -348,36 +549,6 @@
             {/if}
           </div>
         </div>
-      </div>
-    </div>
-    
-    <div class="form-section">
-      <h3>Job Phases</h3>
-      <div class="phase-input">
-        <input
-          type="text"
-          bind:value={newPhaseName}
-          placeholder="Phase name (e.g., 'Rough In', 'Trim Out')"
-          on:keydown={(e) => e.key === 'Enter' && (e.preventDefault(), addPhase())}
-        />
-        <Button type="button" variant="secondary" on:click={addPhase}>Add Phase</Button>
-      </div>
-      
-      <div class="phases-list">
-        {#each formData.phases as phase, index}
-          <div class="phase-row">
-            <span class="phase-number">{index + 1}</span>
-            <span class="phase-name">{phase.name}</span>
-            <div class="phase-actions">
-              <button type="button" on:click={() => movePhaseUp(index)} disabled={index === 0}>↑</button>
-              <button type="button" on:click={() => movePhaseDown(index)} disabled={index === formData.phases.length - 1}>↓</button>
-              <button type="button" on:click={() => removePhase(index)} class="remove">×</button>
-            </div>
-          </div>
-        {/each}
-        {#if formData.phases.length === 0}
-          <p class="empty-message">No phases added yet</p>
-        {/if}
       </div>
     </div>
   </form>
@@ -615,6 +786,87 @@
     gap: 0.5rem;
   }
   
+  .phases-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .phase-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+  }
+  
+  .phase-input-row:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-hover);
+  }
+  
+  .drag-handle {
+    cursor: grab;
+    color: var(--text-secondary);
+    user-select: none;
+    padding: 0 0.25rem;
+  }
+  
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+  
+  .phase-name-input {
+    flex: 1;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+  
+  .phase-name-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+  }
+  
+  .remove-phase {
+    padding: 0.25rem 0.5rem;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  
+  .remove-phase:hover {
+    color: var(--danger);
+  }
+  
+  .add-phase-btn {
+    padding: 0.5rem 1rem;
+    background: none;
+    border: 2px dashed var(--border-color);
+    border-radius: 0.375rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+  }
+  
+  .add-phase-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  
   .phase-item,
   .phase-row {
     display: flex;
@@ -623,6 +875,16 @@
     padding: 0.5rem;
     background: #f9f9f9;
     border-radius: 4px;
+    cursor: move;
+    transition: all 0.2s;
+  }
+  
+  .phase-item:hover {
+    background: #f0f0f0;
+  }
+  
+  .phase-item.dragging {
+    opacity: 0.5;
   }
   
   .phase-order,
@@ -641,6 +903,43 @@
   
   .phase-name {
     flex: 1;
+  }
+  
+  .delete-phase-btn {
+    padding: 0.25rem 0.5rem;
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+    margin-left: auto;
+  }
+  
+  .delete-phase-btn:hover {
+    color: #ef4444;
+  }
+  
+  .add-phase-section {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  
+  .phase-add-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.375rem;
+    background: white;
+    color: #333;
+  }
+  
+  .phase-add-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
   
   .empty {

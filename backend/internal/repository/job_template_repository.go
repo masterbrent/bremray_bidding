@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 
 	"github.com/masterbrent/electrical-bidding-app/internal/models"
 )
@@ -114,20 +115,32 @@ func (r *jobTemplateRepository) GetByID(ctx context.Context, id string) (*models
 	// Load template phases
 	template.Phases, err = r.GetTemplatePhases(ctx, id)
 	if err != nil {
+		log.Printf("Error loading phases for template %s: %v", id, err)
 		return nil, err
 	}
+	log.Printf("Loaded %d phases for template %s", len(template.Phases), id)
 	
 	return template, nil
 }
 
 func (r *jobTemplateRepository) Update(ctx context.Context, template *models.JobTemplate) error {
+	log.Printf("Repository Update called for template %s, phases: %d", template.ID, len(template.Phases))
+	
+	// Start a transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	
+	// Update template
 	query := `
 		UPDATE job_templates SET
 			name = $2, description = $3, is_active = $4, updated_at = $5
 		WHERE id = $1
 	`
 	
-	result, err := r.db.ExecContext(ctx, query,
+	result, err := tx.ExecContext(ctx, query,
 		template.ID, template.Name, template.Description,
 		template.IsActive, template.UpdatedAt,
 	)
@@ -145,6 +158,43 @@ func (r *jobTemplateRepository) Update(ctx context.Context, template *models.Job
 		return fmt.Errorf("template not found")
 	}
 	
+	// Always update phases when Phases field is not nil (even if empty)
+	if template.Phases != nil {
+		log.Printf("Updating phases for template %s (count: %d)", template.ID, len(template.Phases))
+		
+		// Delete existing phases
+		_, err = tx.ExecContext(ctx, `DELETE FROM template_phases WHERE template_id = $1`, template.ID)
+		if err != nil {
+			log.Printf("Error deleting phases: %v", err)
+			return err
+		}
+		
+		// Insert new phases if any
+		for _, phase := range template.Phases {
+			insertQuery := `
+				INSERT INTO template_phases (id, template_id, name, phase_order, description)
+				VALUES ($1, $2, $3, $4, $5)
+			`
+			log.Printf("Inserting phase: ID=%s, Name=%s, Order=%d", phase.ID, phase.Name, phase.Order)
+			_, err = tx.ExecContext(ctx, insertQuery,
+				phase.ID, template.ID, phase.Name, phase.Order, phase.Description,
+			)
+			if err != nil {
+				log.Printf("Error inserting phase: %v", err)
+				return err
+			}
+		}
+	} else {
+		log.Printf("Phases field is nil for template %s, not updating phases", template.ID)
+	}
+	
+	err = tx.Commit()
+	if err != nil {
+		log.Printf("Error committing transaction: %v", err)
+		return err
+	}
+	
+	log.Printf("Template %s updated successfully", template.ID)
 	return nil
 }
 
@@ -321,6 +371,8 @@ func (r *jobTemplateRepository) scanTemplates(ctx context.Context, rows *sql.Row
 }
 // GetTemplatePhases retrieves all phases for a template
 func (r *jobTemplateRepository) GetTemplatePhases(ctx context.Context, templateID string) ([]models.TemplatePhase, error) {
+	log.Printf("GetTemplatePhases called for template %s", templateID)
+	
 	query := `
 		SELECT id, template_id, name, phase_order, description
 		FROM template_phases
@@ -330,6 +382,7 @@ func (r *jobTemplateRepository) GetTemplatePhases(ctx context.Context, templateI
 	
 	rows, err := r.db.QueryContext(ctx, query, templateID)
 	if err != nil {
+		log.Printf("Error querying template phases: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -337,15 +390,21 @@ func (r *jobTemplateRepository) GetTemplatePhases(ctx context.Context, templateI
 	phases := make([]models.TemplatePhase, 0)
 	for rows.Next() {
 		var phase models.TemplatePhase
+		var description sql.NullString
 		err := rows.Scan(
 			&phase.ID, &phase.TemplateID, &phase.Name, 
-			&phase.Order, &phase.Description,
+			&phase.Order, &description,
 		)
 		if err != nil {
+			log.Printf("Error scanning phase row: %v", err)
 			return nil, err
+		}
+		if description.Valid {
+			phase.Description = description.String
 		}
 		phases = append(phases, phase)
 	}
 	
+	log.Printf("Found %d phases for template %s", len(phases), templateID)
 	return phases, nil
 }

@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -172,6 +175,8 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 	
+	log.Printf("Updating template %s", id)
+	
 	// Get existing template
 	template, err := h.templateRepo.GetByID(ctx, id)
 	if err != nil {
@@ -187,21 +192,38 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		IsActive    *bool  `json:"isActive"`
+		Phases      []struct {
+			Name        string `json:"name"`
+			Order       int    `json:"order"`
+			Description string `json:"description,omitempty"`
+		} `json:"phases,omitempty"`
 	}
 	
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	// Read body for debugging
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Failed to read request body: %v", err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	log.Printf("Raw request body: %s", string(body))
+	
+	// Decode the body
+	if err := json.Unmarshal(body, &req); err != nil {
+		log.Printf("Failed to decode request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+	
+	log.Printf("Update request: name=%s, phases=%d", req.Name, len(req.Phases))
 	
 	// Update fields
 	if req.Name != "" {
 		template.Name = req.Name
 	}
 	
-	if req.Description != "" {
-		template.Description = req.Description
-	}
+	// Allow empty description to clear it
+	template.Description = req.Description
 	
 	if req.IsActive != nil {
 		if *req.IsActive {
@@ -211,12 +233,42 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	// Update phases if provided
+	if req.Phases != nil {
+		log.Printf("Updating template phases: %d phases", len(req.Phases))
+		template.Phases = make([]models.TemplatePhase, 0, len(req.Phases))
+		for i, reqPhase := range req.Phases {
+			phase := models.TemplatePhase{
+				ID:          uuid.New().String(),
+				TemplateID:  template.ID,
+				Name:        reqPhase.Name,
+				Order:       reqPhase.Order,
+				Description: reqPhase.Description,
+			}
+			log.Printf("Adding phase %d: ID=%s, Name=%s, Order=%d", i, phase.ID, phase.Name, phase.Order)
+			template.Phases = append(template.Phases, phase)
+		}
+		template.UpdatedAt = time.Now()
+	} else {
+		log.Printf("No phases in update request")
+	}
+	
 	if err := h.templateRepo.Update(ctx, template); err != nil {
+		log.Printf("Failed to update template: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	
-	respondJSON(w, template)
+	// Reload template to get all associated data
+	updatedTemplate, err := h.templateRepo.GetByID(ctx, template.ID)
+	if err != nil {
+		log.Printf("Failed to reload template: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Template updated successfully, phases: %d", len(updatedTemplate.Phases))
+	respondJSON(w, updatedTemplate)
 }
 
 // Delete deletes a template

@@ -203,6 +203,20 @@ func (h *JobHandler) Create(w http.ResponseWriter, r *http.Request) {
 	job.Address = req.Address
 	job.Notes = req.Notes
 	
+	// Set initial phase to the first phase if template has phases
+	if len(template.Phases) > 0 {
+		// Find the phase with the lowest order number
+		var firstPhase *models.TemplatePhase
+		for i := range template.Phases {
+			if firstPhase == nil || template.Phases[i].Order < firstPhase.Order {
+				firstPhase = &template.Phases[i]
+			}
+		}
+		if firstPhase != nil {
+			job.CurrentPhaseID = &firstPhase.ID
+		}
+	}
+	
 	// Create job in database
 	if err := h.jobRepo.Create(ctx, job); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -263,6 +277,7 @@ func (h *JobHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Address        string     `json:"address"`
 		Status         string     `json:"status"`
+		CurrentPhaseID *string    `json:"currentPhaseId"`
 		ScheduledDate  *time.Time `json:"scheduledDate"`
 		PermitRequired *bool      `json:"permitRequired"`
 		PermitNumber   string     `json:"permitNumber"`
@@ -284,6 +299,10 @@ func (h *JobHandler) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+	}
+	
+	if req.CurrentPhaseID != nil {
+		job.UpdatePhase(*req.CurrentPhaseID)
 	}
 	
 	if req.ScheduledDate != nil {
