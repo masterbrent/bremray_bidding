@@ -88,8 +88,7 @@
     }))
     .filter(job => {
       const matchesSearch = !searchQuery || 
-        job.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.address.toLowerCase().includes(searchQuery.toLowerCase());
+        job.customer?.name?.toLowerCase().startsWith(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -397,7 +396,7 @@
       <Search size={18} class="search-icon" />
       <input
         type="text"
-        placeholder="Search jobs..."
+        placeholder="Search by customer name..."
         bind:value={searchQuery}
         class="search-input"
       />
