@@ -9,6 +9,9 @@
   import type { Customer, Job, TemplatePhase } from '../lib/types/models';
   import { WaveService } from '../lib/services/waveService';
   
+  // Props
+  export let workspace: string = 'skyview';
+  
   // Component imports
   import Button from '../lib/components/Button.svelte';
   import Card from '../lib/components/Card.svelte';
@@ -45,7 +48,6 @@
   
   let searchQuery = '';
   let statusFilter = 'all';
-  let categoryFilter = 'all'; // New filter for skyview/contractors/rayno
   
   // Initialize viewMode from localStorage if available
   let viewMode: 'cards' | 'list' = 'cards';
@@ -90,6 +92,8 @@
       const matchesSearch = !searchQuery || 
         job.customer?.name?.toLowerCase().startsWith(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
+      // TODO: Add workspace filtering when backend supports it
+      // const matchesWorkspace = job.workspace === workspace;
       return matchesSearch && matchesStatus;
     });
   
@@ -366,7 +370,7 @@
 
   <!-- Header -->
   <div class="dashboard-header">
-    <h1>Jobs</h1>
+    <h1>Jobs - {workspace.charAt(0).toUpperCase() + workspace.slice(1)}</h1>
     {#if permissions.canCreateJobs($effectiveRole)}
       <button class="new-job-btn" on:click={() => showCreateModal = true}>
         <Plus size={18} />
@@ -375,40 +379,9 @@
     {/if}
   </div>
 
-  <!-- Tabs -->
-  <div class="category-tabs">
-    <button 
-      class="category-tab"
-      class:active={categoryFilter === 'all'}
-      on:click={() => categoryFilter = 'all'}
-    >
-      All
-    </button>
-    <button 
-      class="category-tab"
-      class:active={categoryFilter === 'skyview'}
-      on:click={() => categoryFilter = 'skyview'}
-    >
-      Skyview
-    </button>
-    <button 
-      class="category-tab"
-      class:active={categoryFilter === 'contractors'}
-      on:click={() => categoryFilter = 'contractors'}
-    >
-      Contractors
-    </button>
-    <button 
-      class="category-tab"
-      class:active={categoryFilter === 'rayno'}
-      on:click={() => categoryFilter = 'rayno'}
-    >
-      Rayno
-    </button>
-  </div>
-
-  <!-- Search -->
-  <div class="search-section">
+  <!-- Search and View Controls -->
+  <div class="controls-section">
+    <!-- Search -->
     <div class="search-wrapper">
       <Search size={18} class="search-icon" />
       <input
@@ -418,6 +391,8 @@
         class="search-input"
       />
     </div>
+    
+    <!-- View Toggle -->
     <div class="view-toggle">
       <button
         class="view-btn"
@@ -708,20 +683,7 @@
     {/if}
   </div>
   
-  <!-- Hidden admin toggle (only for admins) -->
-  {#if $userStore?.role === 'admin'}
-    <button 
-      class="admin-toggle"
-      on:click={() => userStore.toggleViewMode()}
-      title={$userStore.isViewingAsTech ? 'Switch to Admin View' : 'Switch to Tech View'}
-    >
-      {#if $userStore.isViewingAsTech}
-        <Shield size={16} />
-      {:else}
-        <Users size={16} />
-      {/if}
-    </button>
-  {/if}
+
 </div>
 <!-- Date Edit Modal -->
 <Modal bind:isOpen={showDateModal} title="Edit Job Dates" size="sm">
@@ -883,7 +845,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
   }
 
   .dashboard-header h1 {
@@ -894,76 +856,22 @@
     letter-spacing: -0.03em;
   }
 
-  /* Category Tabs */
-  .category-tabs {
+  /* Controls Section */
+  .controls-section {
     display: flex;
-    gap: 2rem;
-    margin-bottom: 2.5rem;
-    border-bottom: 1px solid #e5e5e5;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .category-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .category-tab {
-    padding: 0 0 1rem 0;
-    border: none;
-    background: none;
-    font-size: 0.9375rem;
-    font-weight: 500;
-    color: #737373;
-    cursor: pointer;
-    transition: color 0.2s ease;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-    letter-spacing: -0.01em;
-    position: relative;
-  }
-
-  .category-tab:hover {
-    color: #404040;
-  }
-
-  .category-tab.active {
-    color: #0a0a0a;
-    font-weight: 600;
-  }
-
-  .category-tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: #0a0a0a;
-    animation: tabSlide 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  @keyframes tabSlide {
-    from {
-      transform: scaleX(0);
-    }
-    to {
-      transform: scaleX(1);
-    }
-  }
-
-  /* Search Section */
-  .search-section {
-    margin-bottom: 2rem;
-    display: flex;
-    gap: 0.75rem;
+    gap: 1rem;
     align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
   }
 
+
+
+  /* Search */
   .search-wrapper {
     position: relative;
     flex: 1;
+    max-width: 400px;
   }
 
   :global(.search-icon) {
@@ -1882,7 +1790,7 @@
     }
 
     .dashboard-header {
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
     }
 
     .dashboard-header h1 {
@@ -1899,14 +1807,7 @@
       height: 16px;
     }
 
-    .category-tabs {
-      gap: 1.5rem;
-      margin-bottom: 1.75rem;
-    }
 
-    .category-tab {
-      font-size: 0.875rem;
-    }
 
     .search-section {
       flex-direction: column;
@@ -1973,6 +1874,24 @@
       width: 32px;
       height: 32px;
     }
+    
+    .controls-section {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+    
+    .workspace-selector {
+      width: 100%;
+    }
+    
+    .workspace-dropdown {
+      width: 100%;
+    }
+    
+    .search-wrapper {
+      max-width: 100%;
+    }
   }
 
   @media (max-width: 480px) {
@@ -1989,29 +1908,5 @@
     }
   }
 
-  /* Admin Toggle - Hidden but accessible */
-  .admin-toggle {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 50%;
-    background: #f5f5f5;
-    border: 1px solid #e5e5e5;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0.3;
-    transition: all 0.2s ease;
-    color: #737373;
-  }
 
-  .admin-toggle:hover {
-    opacity: 1;
-    background: #0a0a0a;
-    color: white;
-    border-color: #0a0a0a;
-  }
 </style>

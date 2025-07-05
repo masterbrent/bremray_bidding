@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { router } from './lib/router';
   import { itemsStore, jobsStore, jobTemplatesStore, companySettingsStore, userStore, effectiveRole, permissions } from './lib/stores';
-  import { Menu, X, Briefcase, Package, FileText, Settings, Zap, BarChart3, Users } from 'lucide-svelte';
+  import { Menu, X, Briefcase, Package, FileText, Settings, Zap, BarChart3, Users, Shield } from 'lucide-svelte';
   import StatusIndicators from './lib/components/StatusIndicators.svelte';
   
   // Import pages
@@ -19,6 +19,14 @@
   let routeParams: any = {};
   let error: any = null;
   let mobileMenuOpen = false;
+  
+  // Workspace state
+  let currentWorkspace = 'skyview';
+  
+  // For techs, always force skyview
+  $: if (!permissions.canSeePrices($effectiveRole)) {
+    currentWorkspace = 'skyview';
+  }
   
   $: navItems = [
     { route: 'jobs', label: 'Jobs', icon: Briefcase },
@@ -90,6 +98,17 @@
       </button>
     </div>
     
+    {#if permissions.canSeePrices($effectiveRole)}
+      <div class="workspace-selector">
+        <label>Workspace</label>
+        <select bind:value={currentWorkspace} class="workspace-dropdown">
+          <option value="skyview">Skyview</option>
+          <option value="contractors">Contractors</option>
+          <option value="rayno">Rayno</option>
+        </select>
+      </div>
+    {/if}
+    
     <nav class="nav">
       {#each navItems as item}
         <button 
@@ -105,6 +124,23 @@
     
     <div class="sidebar-footer">
       <StatusIndicators />
+      
+      {#if $userStore?.role === 'admin'}
+        <button 
+          class="admin-toggle"
+          on:click={() => userStore.toggleViewMode()}
+          title={$userStore.isViewingAsTech ? 'Switch to Admin View' : 'Switch to Tech View'}
+        >
+          {#if $userStore.isViewingAsTech}
+            <Shield size={16} />
+            <span>Switch to Admin View</span>
+          {:else}
+            <Users size={16} />
+            <span>Switch to Tech View</span>
+          {/if}
+        </button>
+      {/if}
+      
       <div class="user-section">
         <div class="user-avatar">B</div>
         <div>
@@ -130,7 +166,7 @@
     {:else}
       <div class="page-wrapper">
         {#if currentRoute === 'jobs'}
-          <JobsPage />
+          <JobsPage workspace={currentWorkspace} />
         {:else if currentRoute === 'stats'}
           {#if permissions.canSeePrices($effectiveRole)}
             <StatsPage />
@@ -343,6 +379,50 @@
     color: white;
   }
   
+  /* Workspace Selector */
+  .workspace-selector {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  
+  .workspace-selector label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+  
+  .workspace-dropdown {
+    width: 100%;
+    padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3e%3cpath fill='%236b7280' d='M6 9L1 4h10z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .workspace-dropdown:hover {
+    background-color: white;
+    border-color: var(--gray-300);
+  }
+  
+  .workspace-dropdown:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.1);
+  }
+
   /* Sidebar Footer */
   .sidebar-footer {
     padding: 1.5rem;
@@ -350,6 +430,34 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+  
+  /* Admin Toggle */
+  .admin-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .admin-toggle:hover {
+    background: white;
+    border-color: var(--gray-300);
+    color: var(--text-primary);
+  }
+  
+  .admin-toggle :global(svg) {
+    width: 16px;
+    height: 16px;
   }
   
   .user-section {
