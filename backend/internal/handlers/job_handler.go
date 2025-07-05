@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +57,9 @@ func (h *JobHandler) RegisterRoutes(router *mux.Router) {
 	// Job photos
 	router.HandleFunc("/jobs/{id}/photos", h.AddPhoto).Methods("POST", "OPTIONS")
 	router.HandleFunc("/jobs/{id}/photos/{photoId}", h.RemovePhoto).Methods("DELETE", "OPTIONS")
+	
+	// Wave integration
+	router.HandleFunc("/jobs/{id}/send-to-wave", h.SendToWave).Methods("POST", "OPTIONS")
 }
 
 // List returns all jobs
@@ -619,4 +624,141 @@ func (h *JobHandler) RemovePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SendToWave sends a job to Wave for invoicing
+func (h *JobHandler) SendToWave(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	jobID := vars["id"]
+	
+	// Get the job with all related data
+	job, err := h.jobRepo.GetByID(ctx, jobID)
+	if err != nil {
+		http.Error(w, "Job not found", http.StatusNotFound)
+		return
+	}
+	
+	// Check if already sent to Wave
+	if job.WaveInvoiceID != "" {
+		http.Error(w, "Job already has a Wave invoice", http.StatusBadRequest)
+		return
+	}
+	
+	// Get customer info
+	customer, err := h.customerRepo.GetByID(ctx, job.CustomerID)
+	if err != nil {
+		http.Error(w, "Customer not found", http.StatusNotFound)
+		return
+	}
+	
+	// Get Wave credentials
+	credentials, err := services.GetWaveCredentials()
+	if err != nil {
+		http.Error(w, "Wave not configured: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	
+	// Create Wave service
+	waveService, err := services.NewWaveAPIService(*credentials)
+	if err != nil {
+		http.Error(w, "Failed to initialize Wave service", http.StatusInternalServerError)
+		return
+	}
+	defer waveService.Close()
+	
+	// Find or get Skyview customer
+	skyviewCustomerID := os.Getenv("SKYVIEW_CUSTOMER_ID")
+	if skyviewCustomerID == "" {
+		skyviewCustomer, err := waveService.FindCustomerByName("Skyview")
+		if err != nil {
+			http.Error(w, "Failed to find Skyview customer: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if skyviewCustomer == nil {
+			http.Error(w, "Skyview customer not found in Wave. Please create a customer named 'Skyview' in Wave.", http.StatusBadRequest)
+			return
+		}
+		skyviewCustomerID = skyviewCustomer.ID
+	}
+	
+	// Prepare line items
+	var lineItems []services.LineItem
+	
+	// Process job items
+	for _, jobItem := range job.Items {
+		if jobItem.Quantity <= 0 {
+			continue
+		}
+		
+		// Get the full item details
+		item, err := h.itemRepo.GetByID(ctx, jobItem.ItemID)
+		if err != nil {
+			continue
+		}
+		
+		lineItem := services.LineItem{
+			ProductName: item.Name,
+			Description: "", // Items don't have descriptions
+			Quantity:    int(jobItem.Quantity),
+			Price:       jobItem.Price,
+			Total:       jobItem.Total,
+		}
+		
+		lineItems = append(lineItems, lineItem)
+	}
+	
+	// Add permit if required
+	if job.PermitRequired {
+		// Try to find permit price from items table
+		permitPrice := 250.00 // Default
+		
+		// Search for electrical permit in items
+		items, _ := h.itemRepo.List(ctx, map[string]interface{}{})
+		for _, item := range items {
+			if strings.ToLower(item.Name) == "electrical permit" {
+				permitPrice = item.UnitPrice
+				break
+			}
+		}
+		
+		lineItems = append(lineItems, services.LineItem{
+			ProductName: "Electrical Permit",
+			Description: "Required for this project",
+			Quantity:    1,
+			Price:       permitPrice,
+			Total:       permitPrice,
+		})
+	}
+	
+	if len(lineItems) == 0 {
+		http.Error(w, "No billable items found in job", http.StatusBadRequest)
+		return
+	}
+	
+	// Format PO number
+	poNumber := services.FormatPONumber(customer.Name, job.Address)
+	
+	// Create invoice in Wave
+	invoice, err := waveService.CreateInvoice(skyviewCustomerID, lineItems, poNumber, "")
+	if err != nil {
+		http.Error(w, "Failed to create Wave invoice: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// Update job with Wave invoice info
+	job.WaveInvoiceID = invoice.InvoiceNumber
+	job.WaveInvoiceURL = invoice.ViewURL
+	
+	if err := h.jobRepo.Update(ctx, job); err != nil {
+		http.Error(w, "Failed to update job with Wave info", http.StatusInternalServerError)
+		return
+	}
+	
+	// Return the invoice info
+	respondJSON(w, map[string]interface{}{
+		"invoiceNumber": invoice.InvoiceNumber,
+		"invoiceUrl":    invoice.ViewURL,
+		"message":       "Invoice created successfully in Wave",
+	})
 }

@@ -19,9 +19,10 @@ import (
 )
 
 type R2Service struct {
-	client     *s3.Client
-	bucketName string
-	publicURL  string
+	client           *s3.Client
+	bucketName       string
+	publicBucketName string
+	publicURL        string
 }
 
 func NewR2Service() (*R2Service, error) {
@@ -30,11 +31,18 @@ func NewR2Service() (*R2Service, error) {
 	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
 	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
 	bucketName := os.Getenv("R2_BUCKET_NAME")
+	publicBucketName := os.Getenv("R2_PUBLIC_BUCKET_NAME")
+	publicURL := os.Getenv("R2_PUBLIC_BUCKET_URL")
 	endpoint := os.Getenv("R2_ENDPOINT")
-	publicURL := os.Getenv("R2_PUBLIC_URL")
 
-	if accountID == "" || accessKeyID == "" || secretAccessKey == "" || bucketName == "" || endpoint == "" {
+	if accountID == "" || accessKeyID == "" || secretAccessKey == "" || endpoint == "" {
 		return nil, fmt.Errorf("missing required R2 environment variables")
+	}
+
+	// Use public bucket for photos if configured, otherwise fall back to main bucket
+	photoBucket := publicBucketName
+	if photoBucket == "" {
+		photoBucket = bucketName
 	}
 
 	// Create custom resolver for R2
@@ -62,9 +70,10 @@ func NewR2Service() (*R2Service, error) {
 	client := s3.NewFromConfig(cfg)
 
 	return &R2Service{
-		client:     client,
-		bucketName: bucketName,
-		publicURL:  publicURL,
+		client:           client,
+		bucketName:       bucketName,
+		publicBucketName: photoBucket,
+		publicURL:        publicURL,
 	}, nil
 }
 
@@ -101,9 +110,9 @@ func (s *R2Service) UploadPhoto(file multipart.File, header *multipart.FileHeade
 		contentType = "image/webp"
 	}
 
-	// Upload to R2
+	// Upload to R2 (use public bucket for photos)
 	_, err := s.client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucketName),
+		Bucket:      aws.String(s.publicBucketName),
 		Key:         aws.String(filename),
 		Body:        bytes.NewReader(buf.Bytes()),
 		ContentType: aws.String(contentType),
@@ -113,22 +122,12 @@ func (s *R2Service) UploadPhoto(file multipart.File, header *multipart.FileHeade
 		return "", fmt.Errorf("failed to upload to R2: %w", err)
 	}
 
-	// Generate a presigned URL for accessing the photo
-	// This works even if the bucket isn't public
-	presignClient := s3.NewPresignClient(s.client)
-	presignResult, err := presignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(s.bucketName),
-		Key:    aws.String(filename),
-	}, func(opts *s3.PresignOptions) {
-		opts.Expires = time.Duration(7 * 24 * time.Hour) // 7 days
-	})
-	if err != nil {
-		// Fallback to public URL if presigning fails
-		publicURL := fmt.Sprintf("%s/%s", strings.TrimRight(s.publicURL, "/"), filename)
-		return publicURL, nil
+	// Return the public URL
+	if s.publicURL == "" {
+		return "", fmt.Errorf("R2_PUBLIC_BUCKET_URL not configured")
 	}
-	
-	return presignResult.URL, nil
+	publicURL := fmt.Sprintf("%s/%s", strings.TrimRight(s.publicURL, "/"), filename)
+	return publicURL, nil
 }
 
 // DeletePhoto deletes a photo from R2
@@ -137,7 +136,7 @@ func (s *R2Service) DeletePhoto(photoURL string) error {
 	key := strings.TrimPrefix(photoURL, s.publicURL+"/")
 	
 	_, err := s.client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
-		Bucket: aws.String(s.bucketName),
+		Bucket: aws.String(s.publicBucketName),
 		Key:    aws.String(key),
 	})
 	
@@ -150,7 +149,7 @@ func (s *R2Service) DeleteJobPhotos(jobID string) error {
 	prefix := fmt.Sprintf("jobs/%s/", jobID)
 	
 	resp, err := s.client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
-		Bucket: aws.String(s.bucketName),
+		Bucket: aws.String(s.publicBucketName),
 		Prefix: aws.String(prefix),
 	})
 	if err != nil {
@@ -160,7 +159,7 @@ func (s *R2Service) DeleteJobPhotos(jobID string) error {
 	// Delete each object
 	for _, obj := range resp.Contents {
 		_, err := s.client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
-			Bucket: aws.String(s.bucketName),
+			Bucket: aws.String(s.publicBucketName),
 			Key:    obj.Key,
 		})
 		if err != nil {

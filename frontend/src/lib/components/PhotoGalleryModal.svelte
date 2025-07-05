@@ -1,201 +1,168 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import Modal from './Modal.svelte';
-  import { ChevronLeft, ChevronRight, X, Image as ImageIcon } from 'lucide-svelte';
+  import PhotoGallery from './PhotoGallery.svelte';
+  import ConfirmModal from './ConfirmModal.svelte';
+  import { PhotoService } from '../services/photoService';
+  import { jobsStore, jobs } from '../stores';
+  import type { Job } from '../types/models';
   
-  export let isOpen: boolean = false;
-  export let photos: string[] = [];
-  export let title: string = 'Photos';
+  export let isOpen = false;
+  export let job: Job | null = null;
   
-  let currentIndex = 0;
+  const dispatch = createEventDispatcher();
   
-  function nextPhoto() {
-    if (currentIndex < photos.length - 1) {
-      currentIndex++;
+  let isDeletingPhotos = false;
+  let deleteConfirm = {
+    show: false,
+    photoIds: [] as string[],
+    message: ''
+  };
+  
+  function handleClose() {
+    isOpen = false;
+  }
+  
+  function handleDelete(event: CustomEvent<{ ids: string[] }>) {
+    if (!job || isDeletingPhotos) return;
+    
+    const photoIds = event.detail.ids.map(id => id.replace('photo_', ''));
+    
+    if (photoIds.length === 0) return;
+    
+    deleteConfirm = {
+      show: true,
+      photoIds: photoIds,
+      message: photoIds.length === 1 
+        ? 'Are you sure you want to delete this photo?' 
+        : `Are you sure you want to delete ${photoIds.length} photos?`
+    };
+  }
+  
+  async function confirmDelete() {
+    if (!job || deleteConfirm.photoIds.length === 0) return;
+    
+    try {
+      isDeletingPhotos = true;
+      
+      // Delete photos via API
+      await PhotoService.deletePhotos(job.id, deleteConfirm.photoIds);
+      
+      // Reload job to get updated photos
+      await jobsStore.loadById(job.id);
+      
+      // Update the job reference
+      job = $jobs.find(j => j.id === job!.id) || null;
+      
+      // Dispatch event so parent can update if needed
+      dispatch('photosDeleted', { jobId: job?.id, photoIds: deleteConfirm.photoIds });
+      
+      // Close the confirmation modal
+      deleteConfirm = { show: false, photoIds: [], message: '' };
+      
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      // Close the modal and we could show an error modal here
+      deleteConfirm = { show: false, photoIds: [], message: '' };
+    } finally {
+      isDeletingPhotos = false;
     }
   }
   
-  function previousPhoto() {
-    if (currentIndex > 0) {
-      currentIndex--;
-    }
+  function handleDownload(event: CustomEvent<{ ids: string[] }>) {
+    if (!job) return;
+    
+    const photos = job.photos || [];
+    const selectedPhotos = photos
+      .filter(photo => event.detail.ids.includes(`photo_${photo.id}`))
+      .map(photo => ({
+        id: photo.id,
+        url: photo.url,
+        name: `job_${job.id}_photo_${photo.id}.jpg`
+      }));
+    
+    // Download each photo
+    selectedPhotos.forEach(photo => {
+      const link = document.createElement('a');
+      link.href = photo.url;
+      link.download = photo.name;
+      link.target = '_blank';
+      link.click();
+    });
   }
   
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'ArrowLeft') {
-      previousPhoto();
-    } else if (event.key === 'ArrowRight') {
-      nextPhoto();
-    }
-  }
-  
-  $: if (!isOpen) {
-    currentIndex = 0;
-  }
+  $: photos = job?.photos?.map(photo => ({
+    id: `photo_${photo.id}`,
+    url: photo.url,
+    thumbnail: photo.url,
+    name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
+  })) || [];
 </script>
 
-<Modal bind:isOpen {title} size="large">
-  {#if photos.length === 0}
-    <div class="empty-state">
-      <ImageIcon size={48} />
-      <p>No photos available</p>
-    </div>
-  {:else}
-    <div class="gallery" on:keydown={handleKeydown} tabindex="0">
-      <div class="photo-container">
-        <img src={photos[currentIndex]} alt="Job photo {currentIndex + 1}" />
-        
-        {#if photos.length > 1}
-          <button 
-            class="nav-button prev" 
-            on:click={previousPhoto}
-            disabled={currentIndex === 0}
-            aria-label="Previous photo"
-          >
-            <ChevronLeft size={24} />
-          </button>
-          
-          <button 
-            class="nav-button next" 
-            on:click={nextPhoto}
-            disabled={currentIndex === photos.length - 1}
-            aria-label="Next photo"
-          >
-            <ChevronRight size={24} />
-          </button>
-        {/if}
+<Modal bind:isOpen={isOpen} on:close={handleClose} title="{job?.customer?.name || 'Job'} Photos">
+  <div class="gallery-modal-content">
+    {#if job}
+      <div class="job-info">
+        <h3>{job.customer?.name || 'Unknown Customer'}</h3>
+        <p class="job-address">{job.customer?.address || 'No address'}</p>
+        <p class="photo-count">{photos.length} photo{photos.length !== 1 ? 's' : ''}</p>
       </div>
       
-      {#if photos.length > 1}
-        <div class="photo-counter">
-          {currentIndex + 1} / {photos.length}
-        </div>
-        
-        <div class="thumbnails">
-          {#each photos as photo, index}
-            <button 
-              class="thumbnail"
-              class:active={index === currentIndex}
-              on:click={() => currentIndex = index}
-              aria-label="View photo {index + 1}"
-            >
-              <img src={photo} alt="Thumbnail {index + 1}" />
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {/if}
+      <PhotoGallery 
+        {photos}
+        on:delete={handleDelete}
+        on:download={handleDownload}
+      />
+    {/if}
+  </div>
 </Modal>
 
+<ConfirmModal
+  bind:isOpen={deleteConfirm.show}
+  title="Delete Photos"
+  message={deleteConfirm.message}
+  confirmText="Delete"
+  variant="danger"
+  onConfirm={confirmDelete}
+  onCancel={() => deleteConfirm = { show: false, photoIds: [], message: '' }}
+/>
+
 <style>
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 2rem;
-    color: var(--gray-400);
-    gap: 1rem;
+  .gallery-modal-content {
+    padding: 1rem;
+    max-height: 80vh;
+    overflow-y: auto;
   }
   
-  .gallery {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    outline: none;
+  .job-info {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
   }
   
-  .photo-container {
-    position: relative;
-    background: var(--gray-100);
-    border-radius: 16px;
-    overflow: hidden;
-    min-height: 400px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .job-info h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
   }
   
-  .photo-container img {
-    width: 100%;
-    height: auto;
-    max-height: 600px;
-    object-fit: contain;
-  }
-  
-  .nav-button {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.9);
-    border: none;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-  
-  .nav-button:hover:not(:disabled) {
-    background: white;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  }
-  
-  .nav-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .nav-button.prev {
-    left: 1rem;
-  }
-  
-  .nav-button.next {
-    right: 1rem;
-  }
-  
-  .photo-counter {
-    text-align: center;
+  .job-address {
+    margin: 0 0 0.25rem 0;
+    color: #6b7280;
     font-size: 0.875rem;
-    color: var(--gray-600);
+  }
+  
+  .photo-count {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
     font-weight: 500;
   }
   
-  .thumbnails {
-    display: flex;
-    gap: 0.75rem;
-    overflow-x: auto;
-    padding: 0.25rem;
-  }
-  
-  .thumbnail {
-    flex-shrink: 0;
-    width: 80px;
-    height: 80px;
-    border: 2px solid transparent;
-    border-radius: 12px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: var(--gray-100);
-  }
-  
-  .thumbnail img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  
-  .thumbnail:hover {
-    transform: scale(1.05);
-  }
-  
-  .thumbnail.active {
-    border-color: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  @media (max-width: 640px) {
+    .gallery-modal-content {
+      padding: 0.5rem;
+    }
   }
 </style>

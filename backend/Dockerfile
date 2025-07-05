@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git
@@ -49,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
 
 # Run the binary
-CMD ["./server"]
+CMD ["/app/server"]

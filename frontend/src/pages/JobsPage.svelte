@@ -4,9 +4,10 @@
   import { router } from '../lib/router';
   import { Plus, Search, Calendar, Clock, CheckCircle, AlertCircle,
            MapPin, DollarSign, Camera, FileText, Trash2, ChevronRight,
-           Users, Package, Shield, ShieldOff, Activity,
+           Users, Package, Shield, ShieldOff, Activity, Send,
            Edit3, ExternalLink, LayoutGrid, List } from 'lucide-svelte';
   import type { Customer, Job } from '../lib/types/models';
+  import { WaveService } from '../lib/services/waveService';
   
   // Component imports
   import Button from '../lib/components/Button.svelte';
@@ -45,8 +46,24 @@
   let searchQuery = '';
   let statusFilter = 'all';
   let categoryFilter = 'all'; // New filter for skyview/contractors/rayno
+  
+  // Initialize viewMode from localStorage if available
   let viewMode: 'cards' | 'list' = 'cards';
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const savedViewMode = localStorage.getItem('jobsViewMode');
+    if (savedViewMode === 'cards' || savedViewMode === 'list') {
+      viewMode = savedViewMode;
+    }
+  }
+  
   let formError = '';
+  let sendingToWave: { [jobId: string]: boolean } = {};
+  let waveError: { [jobId: string]: string } = {};
+  
+  // Update localStorage when viewMode changes
+  $: if (typeof window !== 'undefined' && window.localStorage && viewMode) {
+    localStorage.setItem('jobsViewMode', viewMode);
+  }
   
   // Load data
   onMount(async () => {
@@ -144,6 +161,33 @@
     event.stopPropagation();
     selectedJob = job;
     showInvoiceModal = true;
+  }
+  
+  async function sendToWave(event: Event, job: Job) {
+    event.stopPropagation();
+    
+    if (sendingToWave[job.id]) return;
+    
+    // Clear any previous error
+    delete waveError[job.id];
+    
+    try {
+      sendingToWave[job.id] = true;
+      
+      const result = await WaveService.sendToWave(job.id);
+      
+      // Update the job in the store with Wave invoice info
+      await jobsStore.updateWaveInfo(job.id, result.invoiceNumber, result.invoiceUrl);
+      
+      // Reload jobs to get updated data
+      await jobsStore.load();
+      
+    } catch (error) {
+      console.error('Failed to send to Wave:', error);
+      waveError[job.id] = error instanceof Error ? error.message : 'Failed to create Wave invoice';
+    } finally {
+      sendingToWave[job.id] = false;
+    }
   }
   
   function openDateEdit(event: Event, job: Job) {
@@ -489,15 +533,35 @@
 
             <!-- Actions -->
             <div class="job-actions">
+              {#if !job.waveInvoiceId && !sendingToWave[job.id]}
+                <button 
+                  class="action-btn" 
+                  on:click={(e) => sendToWave(e, job)}
+                  title="Send to Wave"
+                >
+                  <Send size={18} />
+                  <span>Send to Wave</span>
+                </button>
+              {:else if sendingToWave[job.id]}
+                <button class="action-btn" disabled>
+                  <span>Sending...</span>
+                </button>
+              {/if}
               <button class="action-btn" on:click={(e) => openPhotoGallery(e, job)}>
                 <Camera size={18} />
-                <span>Gallery</span>
+                <span>Gallery {#if job.photos?.length > 0}({job.photos.length}){/if}</span>
               </button>
               <button class="action-btn" on:click={(e) => openInvoice(e, job)}>
                 <FileText size={18} />
                 <span>Invoice</span>
               </button>
             </div>
+            
+            {#if waveError[job.id]}
+              <div class="wave-error">
+                {waveError[job.id]}
+              </div>
+            {/if}
 
             <!-- Footer Actions -->
             <div class="job-footer">
@@ -685,7 +749,11 @@
 </Modal>
 
 {#if selectedJob}
-  <PhotoGalleryModal bind:isOpen={showPhotoGallery} job={selectedJob} />
+  <PhotoGalleryModal 
+    bind:isOpen={showPhotoGallery} 
+    job={selectedJob} 
+    on:photosDeleted={() => jobsStore.load()}
+  />
   <InvoiceModal bind:isOpen={showInvoiceModal} job={selectedJob} />
 {/if}
 
@@ -1340,6 +1408,17 @@
 
   .wave-link:hover {
     color: var(--primary-600);
+  }
+  
+  .wave-error {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #dc2626;
+    font-size: 0.875rem;
+    text-align: center;
   }
 
   /* Actions */

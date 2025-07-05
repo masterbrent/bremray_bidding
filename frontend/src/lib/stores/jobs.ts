@@ -284,6 +284,18 @@ function createJobsStore() {
       }
     },
 
+    // Update Wave invoice info for a job
+    async updateWaveInfo(jobId: string, invoiceNumber: string, invoiceUrl: string) {
+      update(state => ({
+        ...state,
+        jobs: state.jobs.map(j => 
+          j.id === jobId 
+            ? { ...j, waveInvoiceId: invoiceNumber, waveInvoiceUrl: invoiceUrl }
+            : j
+        )
+      }));
+    },
+
     // Load a single job by ID
     async loadById(jobId: string) {
       try {

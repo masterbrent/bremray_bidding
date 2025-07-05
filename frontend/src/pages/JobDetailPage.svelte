@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { jobsStore, jobs, customersStore, templates, userStore, effectiveRole, permissions } from '../lib/stores';
   import { router } from '../lib/router';
-  import { Card, Button, QuantityPicker, PhotoCaptureModal, PhotoGallery } from '../lib/components';
+  import { Card, Button, QuantityPicker, PhotoCaptureModal, PhotoGallery, ConfirmModal } from '../lib/components';
   import { PhotoService } from '../lib/services/photoService';
   import { Camera } from 'lucide-svelte';
   import type { Job, Customer, JobTemplate } from '../lib/types/models';
@@ -39,6 +39,11 @@
   
   let showPhotoCapture = false;
   let isUploadingPhotos = false;
+  let deletePhotoConfirm = {
+    show: false,
+    photoIds: [] as string[],
+    message: ''
+  };
   
   async function handleQuantityChange(jobItemId: string, newQuantity: number) {
     try {
@@ -99,9 +104,24 @@
   async function handlePhotosDelete(event: CustomEvent<{ ids: string[] }>) {
     if (!job) return;
     
+    const photoIds = event.detail.ids.map(id => id.replace('photo_', ''));
+    const count = photoIds.length;
+    
+    deletePhotoConfirm = {
+      show: true,
+      photoIds: photoIds,
+      message: count === 1 
+        ? 'Are you sure you want to delete this photo?' 
+        : `Are you sure you want to delete ${count} photos?`
+    };
+  }
+  
+  async function confirmPhotosDelete() {
+    if (!job || deletePhotoConfirm.photoIds.length === 0) return;
+    
     try {
       // Delete photos via API (which also removes from R2)
-      await PhotoService.deletePhotos(jobId, event.detail.ids);
+      await PhotoService.deletePhotos(jobId, deletePhotoConfirm.photoIds);
       
       // Reload job to get updated photos
       await jobsStore.loadById(jobId);
@@ -114,9 +134,13 @@
         thumbnail: photo.url,
         name: photo.caption || `Photo ${photo.id.slice(0, 8)}`
       })) || [];
+      
+      // Close the confirmation modal
+      deletePhotoConfirm = { show: false, photoIds: [], message: '' };
     } catch (error) {
       console.error('Failed to delete photos:', error);
-      alert('Failed to delete photos. Please try again.');
+      // We could show an error modal here instead
+      deletePhotoConfirm = { show: false, photoIds: [], message: '' };
     }
   }
   
@@ -207,7 +231,7 @@
               <QuantityPicker
                 value={jobItem.quantity}
                 min={0}
-                max={jobItem.quantity * 2}
+                max={Math.max(jobItem.quantity * 2, 10)}
                 on:change={(e) => handleQuantityChange(jobItem.id, e.detail)}
               />
             </div>
@@ -240,6 +264,16 @@
   <PhotoCaptureModal 
     bind:isOpen={showPhotoCapture}
     on:capture={handlePhotosCapture}
+  />
+  
+  <ConfirmModal
+    bind:isOpen={deletePhotoConfirm.show}
+    title="Delete Photos"
+    message={deletePhotoConfirm.message}
+    confirmText="Delete"
+    variant="danger"
+    onConfirm={confirmPhotosDelete}
+    onCancel={() => deletePhotoConfirm = { show: false, photoIds: [], message: '' }}
   />
 {/if}
 
