@@ -655,8 +655,52 @@
                 {#if permissions.canSeePrices($effectiveRole)}
                   <span class="list-amount">{formatCurrency(job.totalAmount || 0)}</span>
                 {/if}
+                
+                <!-- Action buttons -->
+                <div class="list-actions">
+                  {#if permissions.canSeePrices($effectiveRole)}
+                    {#if !job.waveInvoiceId && !sendingToWave[job.id]}
+                      <button 
+                        class="list-action-btn" 
+                        on:click|stopPropagation={(e) => sendToWave(e, job)}
+                        title="Send to Wave"
+                      >
+                        <Send size={16} />
+                      </button>
+                    {:else if sendingToWave[job.id]}
+                      <button class="list-action-btn" disabled title="Sending...">
+                        <Send size={16} />
+                      </button>
+                    {/if}
+                  {/if}
+                  
+                  <button 
+                    class="list-action-btn" 
+                    on:click|stopPropagation={(e) => openPhotoGallery(e, job)}
+                    title="Gallery {job.photos?.length > 0 ? `(${job.photos.length})` : ''}"
+                  >
+                    <Camera size={16} />
+                  </button>
+                  
+                  {#if permissions.canSeePrices($effectiveRole)}
+                    <button 
+                      class="list-action-btn" 
+                      on:click|stopPropagation={(e) => openInvoice(e, job)}
+                      title="Invoice"
+                    >
+                      <FileText size={16} />
+                    </button>
+                  {/if}
+                </div>
+                
                 <ChevronRight size={18} />
               </div>
+              
+              {#if waveError[job.id]}
+                <div class="list-wave-error">
+                  {waveError[job.id]}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -1142,6 +1186,43 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .list-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .list-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #e5e5e5;
+    background: white;
+    border-radius: var(--radius-md);
+    color: #737373;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .list-action-btn:hover {
+    background: #f9fafb;
+    border-color: #d4d4d8;
+    color: #3f3f46;
+  }
+
+  .list-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .list-action-btn:disabled:hover {
+    background: white;
+    border-color: #e5e5e5;
+    color: #737373;
+  }
+
   .list-item-right :global(svg) {
     color: #d4d4d4;
     transition: color 0.2s ease;
@@ -1520,6 +1601,17 @@
     text-align: center;
   }
 
+  .list-wave-error {
+    grid-column: 1 / -1;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #dc2626;
+    font-size: 0.8125rem;
+  }
+
   /* Actions */
   .job-actions {
     display: flex;
@@ -1871,6 +1963,15 @@
 
     .list-meta {
       font-size: 0.8125rem;
+    }
+    
+    .list-actions {
+      margin-left: auto;
+    }
+    
+    .list-action-btn {
+      width: 32px;
+      height: 32px;
     }
   }
 
